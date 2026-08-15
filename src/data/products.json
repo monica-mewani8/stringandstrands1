@@ -1,0 +1,761 @@
+[
+  {
+    "id": "earring-1",
+    "title": "Gold Square Citrine Stud Earring",
+    "category": "Earrings",
+    "price": 1299,
+    "originalPrice": 1999,
+    "images": [
+      "/assets/products/Earrings/earring-1.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-2",
+    "title": "Blue Sapphire Diamond Drop Earring",
+    "category": "Earrings",
+    "price": 599,
+    "originalPrice": 1099,
+    "images": [
+      "/assets/products/Earrings/earring-2.jpg"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-3",
+    "title": "Pink Acrylic Heart Dangle Earring",
+    "category": "Earrings",
+    "price": 1299,
+    "originalPrice": 1999,
+    "images": [
+      "/assets/products/Earrings/earring-3.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-4",
+    "title": "Gold Pearl Cluster Hoop Earring",
+    "category": "Earrings",
+    "price": 599,
+    "originalPrice": 1299,
+    "images": [
+      "/assets/products/Earrings/earring-4.jpg"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-5",
+    "title": "Green Peridot Rectangle Drop Earring",
+    "category": "Earrings",
+    "price": 899,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Earrings/earring-5.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-6",
+    "title": "Gold Pearl Kundan Jhumka Earring",
+    "category": "Earrings",
+    "price": 899,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Earrings/earring-6.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-7",
+    "title": "Pink Pearl Beaded Jhumka Earring",
+    "category": "Earrings",
+    "price": 499,
+    "originalPrice": 799,
+    "images": [
+      "/assets/products/Earrings/earring-7.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-8",
+    "title": "Silver Baguette Diamond Huggie Earring",
+    "category": "Earrings",
+    "price": 599,
+    "originalPrice": 1099,
+    "images": [
+      "/assets/products/Earrings/earring-8.jpg"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-9",
+    "title": "Pink Enamel Bow Pearl Stud Earring",
+    "category": "Earrings",
+    "price": 899,
+    "originalPrice": 1399,
+    "images": [
+      "/assets/products/Earrings/earring-9.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-10",
+    "title": "Green Striped Enamel Hoop Earring",
+    "category": "Earrings",
+    "price": 1299,
+    "originalPrice": 1799,
+    "images": [
+      "/assets/products/Earrings/earring-10.jpg"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-11",
+    "title": "White Crystal Pearl Drop Earring",
+    "category": "Earrings",
+    "price": 1299,
+    "originalPrice": 1799,
+    "images": [
+      "/assets/products/Earrings/earring-11.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-12",
+    "title": "Gold Pearl Bow Earring",
+    "category": "Earrings",
+    "price": 499,
+    "originalPrice": 799,
+    "images": [
+      "/assets/products/Earrings/earring-12.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-13",
+    "title": "Blue Crystal Tear Drop Earring",
+    "category": "Earrings",
+    "price": 499,
+    "originalPrice": 999,
+    "images": [
+      "/assets/products/Earrings/earring-13.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-14",
+    "title": "Green Emerald Square Stud Earring",
+    "category": "Earrings",
+    "price": 599,
+    "originalPrice": 899,
+    "images": [
+      "/assets/products/Earrings/earring-14.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-15",
+    "title": "Mint Green Floral Chandelier Earring",
+    "category": "Earrings",
+    "price": 899,
+    "originalPrice": 1399,
+    "images": [
+      "/assets/products/Earrings/earring-15.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-16",
+    "title": "Pink Square Gemstone Drop Earring",
+    "category": "Earrings",
+    "price": 699,
+    "originalPrice": 999,
+    "images": [
+      "/assets/products/Earrings/earring-16.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-17",
+    "title": "Green Quartz Oval Drop Earring",
+    "category": "Earrings",
+    "price": 699,
+    "originalPrice": 1199,
+    "images": [
+      "/assets/products/Earrings/earring-17.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-18",
+    "title": "Blue Enamel Floral Drop Earring",
+    "category": "Earrings",
+    "price": 599,
+    "originalPrice": 899,
+    "images": [
+      "/assets/products/Earrings/earring-18.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-19",
+    "title": "Purple Amethyst Rectangle Earring",
+    "category": "Earrings",
+    "price": 699,
+    "originalPrice": 1199,
+    "images": [
+      "/assets/products/Earrings/earring-19.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-20",
+    "title": "Green Enamel Heart Drop Earring",
+    "category": "Earrings",
+    "price": 699,
+    "originalPrice": 999,
+    "images": [
+      "/assets/products/Earrings/earring-20.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-21",
+    "title": "Crystal Star Cluster Drop Earring",
+    "category": "Earrings",
+    "price": 899,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Earrings/earring-21.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-22",
+    "title": "Green Jade Disc Drop Earring",
+    "category": "Earrings",
+    "price": 599,
+    "originalPrice": 1099,
+    "images": [
+      "/assets/products/Earrings/earring-22.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "earring-23",
+    "title": "Simple Pearl Stud Earring",
+    "category": "Earrings",
+    "price": 899,
+    "originalPrice": 1199,
+    "images": [
+      "/assets/products/Earrings/earring-23.jpg"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-1",
+    "title": "Delicate Gold Chain Bracelet",
+    "category": "Bracelets",
+    "price": 899,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Bracelets/bracelets-1.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-2",
+    "title": "Silver Minimalist Chain Bracelet",
+    "category": "Bracelets",
+    "price": 499,
+    "originalPrice": 1199,
+    "images": [
+      "/assets/products/Bracelets/bracelets-2.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-3",
+    "title": "Black Enamel Clover Bracelet",
+    "category": "Bracelets",
+    "price": 599,
+    "originalPrice": 1299,
+    "images": [
+      "/assets/products/Bracelets/bracelets-3.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-4",
+    "title": "Gold Heart Charm Bracelet",
+    "category": "Bracelets",
+    "price": 1299,
+    "originalPrice": 1799,
+    "images": [
+      "/assets/products/Bracelets/bracelets-4.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-5",
+    "title": "White Clover Charm Bracelet",
+    "category": "Bracelets",
+    "price": 699,
+    "originalPrice": 999,
+    "images": [
+      "/assets/products/Bracelets/bracelets-5.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-6",
+    "title": "Simple Gold Bar Bracelet",
+    "category": "Bracelets",
+    "price": 899,
+    "originalPrice": 1399,
+    "images": [
+      "/assets/products/Bracelets/bracelets-6.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-7",
+    "title": "Delicate Gold Bead Bracelet",
+    "category": "Bracelets",
+    "price": 899,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Bracelets/bracelets-7.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-8",
+    "title": "Thick Gold Cuff Bracelet",
+    "category": "Bracelets",
+    "price": 899,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Bracelets/bracelets-8.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-9",
+    "title": "Gold Linked Chain Bracelet",
+    "category": "Bracelets",
+    "price": 899,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Bracelets/bracelets-9.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-10",
+    "title": "Chunky Gold Heart Pearl Bracelet",
+    "category": "Bracelets",
+    "price": 1299,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Bracelets/bracelets-10.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-11",
+    "title": "White Clover Chain Bracelet",
+    "category": "Bracelets",
+    "price": 699,
+    "originalPrice": 1399,
+    "images": [
+      "/assets/products/Bracelets/bracelets-11.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-12",
+    "title": "Black Enamel Clover Chain Bracelet",
+    "category": "Bracelets",
+    "price": 599,
+    "originalPrice": 1299,
+    "images": [
+      "/assets/products/Bracelets/bracelets-12.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-13",
+    "title": "Gold Butterfly Charm Bracelet",
+    "category": "Bracelets",
+    "price": 899,
+    "originalPrice": 1399,
+    "images": [
+      "/assets/products/Bracelets/bracelets-13.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-14",
+    "title": "Smooth Gold Bangle",
+    "category": "Bracelets",
+    "price": 1299,
+    "originalPrice": 1999,
+    "images": [
+      "/assets/products/Bracelets/bracelets-14.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-15",
+    "title": "Crystal Beaded Bracelet",
+    "category": "Bracelets",
+    "price": 599,
+    "originalPrice": 1099,
+    "images": [
+      "/assets/products/Bracelets/bracelets-15.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-16",
+    "title": "Thin Gold Chain Bracelet",
+    "category": "Bracelets",
+    "price": 599,
+    "originalPrice": 1299,
+    "images": [
+      "/assets/products/Bracelets/bracelets-16.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-17",
+    "title": "Thick Gold Tube Bangle",
+    "category": "Bracelets",
+    "price": 499,
+    "originalPrice": 1199,
+    "images": [
+      "/assets/products/Bracelets/bracelets-17.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-18",
+    "title": "Black Clover Gold Bracelet",
+    "category": "Bracelets",
+    "price": 899,
+    "originalPrice": 1399,
+    "images": [
+      "/assets/products/Bracelets/bracelets-18.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-19",
+    "title": "Delicate Silver Charm Bracelet",
+    "category": "Bracelets",
+    "price": 1299,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Bracelets/bracelets-19.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "bracelets-20",
+    "title": "Gold Textured Hoop Bangle",
+    "category": "Bracelets",
+    "price": 499,
+    "originalPrice": 799,
+    "images": [
+      "/assets/products/Bracelets/bracelets-20.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-1",
+    "title": "Thick Gold Chain Link Necklace",
+    "category": "Necklace",
+    "price": 499,
+    "originalPrice": 799,
+    "images": [
+      "/assets/products/Necklace/necklace-1.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-2",
+    "title": "Gold Medallion Pendant Necklace",
+    "category": "Necklace",
+    "price": 699,
+    "originalPrice": 1399,
+    "images": [
+      "/assets/products/Necklace/necklace-2.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-3",
+    "title": "Star Charm Necklace",
+    "category": "Necklace",
+    "price": 1299,
+    "originalPrice": 1799,
+    "images": [
+      "/assets/products/Necklace/necklace-3.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-4",
+    "title": "Bohemian Multi-Charm Necklace",
+    "category": "Necklace",
+    "price": 1299,
+    "originalPrice": 1999,
+    "images": [
+      "/assets/products/Necklace/necklace-4.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-5",
+    "title": "Gold Heart Pendant Necklace",
+    "category": "Necklace",
+    "price": 599,
+    "originalPrice": 899,
+    "images": [
+      "/assets/products/Necklace/necklace-5.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-6",
+    "title": "Green Enamel Floral Necklace",
+    "category": "Necklace",
+    "price": 499,
+    "originalPrice": 999,
+    "images": [
+      "/assets/products/Necklace/necklace-6.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-7",
+    "title": "Floral Gold Chain Necklace",
+    "category": "Necklace",
+    "price": 699,
+    "originalPrice": 999,
+    "images": [
+      "/assets/products/Necklace/necklace-7.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-8",
+    "title": "Gold Padlock Pendant Necklace",
+    "category": "Necklace",
+    "price": 699,
+    "originalPrice": 1199,
+    "images": [
+      "/assets/products/Necklace/necklace-8.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-9",
+    "title": "Delicate Heart Charm Necklace",
+    "category": "Necklace",
+    "price": 499,
+    "originalPrice": 799,
+    "images": [
+      "/assets/products/Necklace/necklace-9.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-10",
+    "title": "Gold Butterfly Pendant Necklace",
+    "category": "Necklace",
+    "price": 599,
+    "originalPrice": 1099,
+    "images": [
+      "/assets/products/Necklace/necklace-10.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-11",
+    "title": "Multi-colored Gemstone Necklace",
+    "category": "Necklace",
+    "price": 599,
+    "originalPrice": 1299,
+    "images": [
+      "/assets/products/Necklace/necklace-11.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-12",
+    "title": "Green Enamel Charm Necklace",
+    "category": "Necklace",
+    "price": 499,
+    "originalPrice": 1199,
+    "images": [
+      "/assets/products/Necklace/necklace-12.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-13",
+    "title": "Minimalist Gold Chain Necklace",
+    "category": "Necklace",
+    "price": 1299,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Necklace/necklace-13.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-14",
+    "title": "Red and Green Gemstone Necklace",
+    "category": "Necklace",
+    "price": 899,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Necklace/necklace-14.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-15",
+    "title": "Pink and Green Floral Necklace",
+    "category": "Necklace",
+    "price": 1299,
+    "originalPrice": 1799,
+    "images": [
+      "/assets/products/Necklace/necklace-15.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-16",
+    "title": "Simple Pearl Pendant Necklace",
+    "category": "Necklace",
+    "price": 1299,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Necklace/necklace-16.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "necklace-17",
+    "title": "Delicate Gold Charm Necklace",
+    "category": "Necklace",
+    "price": 899,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Necklace/necklace-17.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "ring-1",
+    "title": "Gold Butterfly Open Ring",
+    "category": "Ring",
+    "price": 699,
+    "originalPrice": 1399,
+    "images": [
+      "/assets/products/Ring/ring-1.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "ring-2",
+    "title": "Pearl and Diamond Ring",
+    "category": "Ring",
+    "price": 899,
+    "originalPrice": 1199,
+    "images": [
+      "/assets/products/Ring/ring-2.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "ring-3",
+    "title": "Thick Gold Textured Ring",
+    "category": "Ring",
+    "price": 1299,
+    "originalPrice": 1999,
+    "images": [
+      "/assets/products/Ring/ring-3.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "ring-4",
+    "title": "Gold Rose Flower Ring",
+    "category": "Ring",
+    "price": 699,
+    "originalPrice": 1399,
+    "images": [
+      "/assets/products/Ring/ring-4.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "ring-5",
+    "title": "Minimalist Gold Band Ring",
+    "category": "Ring",
+    "price": 1299,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Ring/ring-5.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "ring-6",
+    "title": "Silver Twisted Band Ring",
+    "category": "Ring",
+    "price": 899,
+    "originalPrice": 1599,
+    "images": [
+      "/assets/products/Ring/ring-6.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "ring-7",
+    "title": "Gold Sunburst Ring",
+    "category": "Ring",
+    "price": 899,
+    "originalPrice": 1399,
+    "images": [
+      "/assets/products/Ring/ring-7.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "ring-8",
+    "title": "Pearl Center Gold Ring",
+    "category": "Ring",
+    "price": 499,
+    "originalPrice": 999,
+    "images": [
+      "/assets/products/Ring/ring-8.png"
+    ],
+    "reviews": []
+  },
+  {
+    "id": "ring-9",
+    "title": "Gold Braided Dome Ring",
+    "category": "Ring",
+    "price": 1299,
+    "originalPrice": 1999,
+    "images": [
+      "/assets/products/Ring/ring-9.png"
+    ],
+    "reviews": []
+  }
+]
