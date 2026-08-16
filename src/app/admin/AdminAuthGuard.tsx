@@ -13,11 +13,15 @@ export default function AdminAuthGuard({ children }: Props) {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { setStatus('denied'); navigate('/'); return; }
 
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('is_admin')
         .eq('id', session.user.id)
         .single();
+
+      if (error) {
+        console.error('Error fetching admin status:', error);
+      }
 
       if (!profile?.is_admin) { setStatus('denied'); navigate('/'); return; }
       setStatus('ok');
