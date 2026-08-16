@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useToast } from './Toast';
 import AddProductModal from './AddProductModal';
 
-const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+const API = import.meta.env.PROD ? '' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001');
 const CATEGORIES = ['All', 'Earrings', 'Necklace', 'Ring', 'Bracelets', 'Bangles', 'Sets', 'Hair Accessories'];
 
 async function getAdminToken() {
