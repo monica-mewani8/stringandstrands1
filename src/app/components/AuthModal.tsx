@@ -52,7 +52,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         handleClose();
         navigate('/profile');
       } else if (mode === 'forgot_password') {
-        const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+        const apiBase = import.meta.env.PROD ? '' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001');
         const checkRes = await fetch(`${apiBase}/api/auth/check-email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

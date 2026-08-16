@@ -61,7 +61,7 @@ export default function CheckoutPage() {
     setLoading(true);
     try {
       // 1. Call backend create-order (ONLY initializes Razorpay)
-      const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const apiBase = import.meta.env.PROD ? '' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001');
       const response = await fetch(`${apiBase}/api/payment/create-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
