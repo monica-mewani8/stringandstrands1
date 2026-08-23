@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+ï»¿import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { CheckCircle, XCircle, Package, CreditCard, Copy, Check, ShoppingBag, RefreshCw } from 'lucide-react';
 
@@ -73,6 +73,7 @@ export default function OrderConfirmPage() {
 
   const shortOrderId = state.orderId ? state.orderId.slice(0, 8).toUpperCase() : null;
 
+  // SUCCESS
   if (state.success) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#fff5f8] via-white to-[#fff0f5] flex items-center justify-center px-4 py-16 relative overflow-hidden">
@@ -87,7 +88,7 @@ export default function OrderConfirmPage() {
                   <CheckCircle className="text-white" size={42} strokeWidth={1.5} />
                 </div>
                 <h1 className="text-3xl font-bold text-white mb-2 tracking-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
-                  Order Confirmed! ??
+                  Order Confirmed!
                 </h1>
                 <p className="text-white/80 text-sm">
                   Thank you{state.customerName ? `, ${state.customerName.split(' ')[0]}` : ''}! Your jewellery is on its way.
@@ -97,7 +98,7 @@ export default function OrderConfirmPage() {
 
             <div className="px-8 py-7">
               <p className="text-[#B3184F]/80 text-sm text-center mb-6">
-                Your order has been placed and handed over to our shipping partner. You'll receive tracking updates soon.
+                Your order has been placed and handed over to our shipping partner. You will receive tracking updates soon.
               </p>
 
               <div className="space-y-3 mb-7">
@@ -168,13 +169,14 @@ export default function OrderConfirmPage() {
           </div>
 
           <p className="text-center text-[#D41E5C]/50 text-xs mt-5">
-            Strings &amp; Strands — Timeless jewellery for every chapter
+            Strings &amp; Strands &mdash; Timeless jewellery for every chapter
           </p>
         </div>
       </div>
     );
   }
 
+  // FAILURE
   const isShippingFailure = state.shiprocketFailed;
 
   return (
@@ -218,7 +220,7 @@ export default function OrderConfirmPage() {
               <div>
                 <p className="text-amber-800 text-sm font-bold mb-1">Refund Policy</p>
                 <p className="text-amber-700 text-sm leading-relaxed">
-                  If any amount was deducted from your account, it will be <strong>automatically refunded to your source account within 5–7 business days</strong>. No action is required from you.
+                  If any amount was deducted from your account, it will be <strong>automatically refunded to your source account within 5 to 7 business days</strong>. No action is required from you.
                 </p>
               </div>
             </div>

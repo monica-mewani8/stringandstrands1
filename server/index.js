@@ -533,17 +533,7 @@ app.post('/api/payment/verify', async (req, res) => {
     // ── Step 5: Create Shiprocket order (synchronous — must succeed) ─────────
     let shiprocketOrderId = null;
     try {
-      const srRes = await fetch(`http://localhost:${PORT}/api/shipping/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: sbOrder.id }),
-      });
-      const srData = await srRes.json();
-      if (srRes.ok && srData.shiprocketOrderId) {
-        shiprocketOrderId = String(srData.shiprocketOrderId);
-      } else {
-        throw new Error(srData.error || 'Shiprocket did not return an order ID');
-      }
+      shiprocketOrderId = await createShiprocketOrder(sbOrder.id);
     } catch (srErr) {
       console.error('[Shiprocket] Order creation failed after payment:', srErr.message);
       // Payment succeeded but shipping failed — return partial failure so frontend shows refund message
@@ -558,15 +548,11 @@ app.post('/api/payment/verify', async (req, res) => {
 
     // ── Step 6: Send confirmation emails (non-fatal) ──────────────────────────
     try {
-      await fetch(`http://localhost:${PORT}/api/email/order-confirmation`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: sbOrder.id,
-          userEmail: customerEmail,
-          userName: customerName,
-          shiprocketOrderId,
-        }),
+      await sendOrderConfirmationEmail({
+        orderId: sbOrder.id,
+        userEmail: customerEmail,
+        userName: customerName,
+        shiprocketOrderId,
       });
     } catch (emailErr) {
       console.error('[Email] Confirmation email failed (non-fatal):', emailErr.message);
@@ -586,96 +572,115 @@ app.post('/api/payment/verify', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SHIPROCKET — Create Shipment
+// SHIPROCKET HELPER — extracted so verify can call it directly (no localhost)
+// Returns the shiprocketOrderId string on success, throws on failure
+// ─────────────────────────────────────────────────────────────────────────────
+async function createShiprocketOrder(orderId) {
+  // Fetch order details from Supabase
+  const { data: order, error: orderError } = await supabase
+    .from('orders')
+    .select(`
+      *,
+      addresses(*),
+      order_items(quantity, price_at_purchase, product_id, products(name, weight_grams))
+    `)
+    .eq('id', orderId)
+    .single();
+
+  if (orderError || !order) throw new Error(`Order not found: ${orderError?.message}`);
+
+  // Authenticate with Shiprocket
+  console.log('[Shiprocket] Authenticating...');
+  const authRes = await fetch('https://apiv2.shiprocket.in/v1/external/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: process.env.SHIPROCKET_EMAIL,
+      password: process.env.SHIPROCKET_PASSWORD,
+    }),
+  });
+  const authData = await authRes.json();
+  console.log('[Shiprocket] Auth response status:', authRes.status, '| has token:', !!authData.token);
+  if (!authData.token) throw new Error(`Shiprocket auth failed: ${authData.message || JSON.stringify(authData)}`);
+
+  const srToken = authData.token;
+  const addr = order.addresses;
+
+  // Amounts: Razorpay stores in paise, Shiprocket expects rupees
+  const totalInRupees = Math.round(order.total_amount / 100);
+
+  const payload = {
+    order_id: orderId,
+    order_date: new Date().toISOString().split('T')[0],
+    pickup_location: 'Primary',
+    billing_customer_name: addr.full_name,
+    billing_address: addr.address_line1,
+    billing_address_2: addr.address_line2 || '',
+    billing_city: addr.city,
+    billing_pincode: String(addr.pincode),
+    billing_state: addr.state,
+    billing_country: 'India',
+    billing_email: '',
+    billing_phone: String(addr.phone),
+    shipping_is_billing: true,
+    order_items: order.order_items.map((item) => ({
+      name: item.products?.name || 'Jewellery Item',
+      sku: item.product_id || 'SKU001',
+      units: item.quantity,
+      selling_price: Math.round(item.price_at_purchase / 100), // convert paise → rupees
+      weight: ((item.products?.weight_grams || 50) / 1000).toString(),
+    })),
+    payment_method: 'Prepaid',
+    sub_total: totalInRupees,  // rupees, not paise
+    length: 10,
+    breadth: 10,
+    height: 5,
+    weight: 0.5,
+  };
+
+  console.log('[Shiprocket] Creating order with payload:', JSON.stringify(payload, null, 2));
+
+  const srOrderRes = await fetch('https://apiv2.shiprocket.in/v1/external/orders/create/adhoc', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${srToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const srOrder = await srOrderRes.json();
+  console.log('[Shiprocket] Create order response status:', srOrderRes.status);
+  console.log('[Shiprocket] Create order response body:', JSON.stringify(srOrder, null, 2));
+
+  if (!srOrder.order_id) {
+    throw new Error(`Shiprocket order creation failed: ${srOrder.message || JSON.stringify(srOrder)}`);
+  }
+
+  // Save Shiprocket order ID back to Supabase
+  await supabase
+    .from('orders')
+    .update({
+      shiprocket_order_id: String(srOrder.order_id),
+      status: 'shipped',
+    })
+    .eq('id', orderId);
+
+  return String(srOrder.order_id);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SHIPROCKET — Create Shipment (public endpoint, delegates to helper)
 // POST /api/shipping/create
-// Body: { orderId } — reads order + address from Supabase
+// Body: { orderId }
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/shipping/create', async (req, res) => {
   try {
     const { orderId } = req.body;
-
-    // Fetch order details from Supabase
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .select(`
-        *,
-        addresses(*),
-        order_items(quantity, price_at_purchase, products(name, weight_grams))
-      `)
-      .eq('id', orderId)
-      .single();
-
-    if (orderError || !order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-
-    // Authenticate with Shiprocket
-    const authRes = await fetch('https://apiv2.shiprocket.in/v1/external/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: process.env.SHIPROCKET_EMAIL,
-        password: process.env.SHIPROCKET_PASSWORD,
-      }),
-    });
-    const authData = await authRes.json();
-    if (!authData.token) throw new Error('Shiprocket auth failed');
-
-    const srToken = authData.token;
-    const addr = order.addresses;
-
-    // Create Shiprocket order
-    const srOrderRes = await fetch('https://apiv2.shiprocket.in/v1/external/orders/create/adhoc', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${srToken}`,
-      },
-      body: JSON.stringify({
-        order_id: orderId,
-        order_date: new Date().toISOString().split('T')[0],
-        pickup_location: 'Primary',
-        billing_customer_name: addr.full_name,
-        billing_address: addr.address_line1,
-        billing_address_2: addr.address_line2 || '',
-        billing_city: addr.city,
-        billing_pincode: addr.pincode,
-        billing_state: addr.state,
-        billing_country: 'India',
-        billing_email: '',
-        billing_phone: addr.phone,
-        shipping_is_billing: true,
-        order_items: order.order_items.map((item) => ({
-          name: item.products?.name || 'Jewellery Item',
-          sku: item.product_id || 'SKU001',
-          units: item.quantity,
-          selling_price: item.price_at_purchase,
-          weight: ((item.products?.weight_grams || 50) / 1000).toString(),
-        })),
-        payment_method: 'Prepaid',
-        sub_total: order.total_amount,
-        length: 10,
-        breadth: 10,
-        height: 5,
-        weight: 0.5,
-      }),
-    });
-
-    const srOrder = await srOrderRes.json();
-    if (!srOrder.order_id) throw new Error(srOrder.message || 'Shiprocket order creation failed');
-
-    // Save Shiprocket order ID back to Supabase
-    await supabase
-      .from('orders')
-      .update({
-        shiprocket_order_id: String(srOrder.order_id),
-        status: 'shipped',
-      })
-      .eq('id', orderId);
-
-    res.json({ success: true, shiprocketOrderId: srOrder.order_id });
+    const shiprocketOrderId = await createShiprocketOrder(orderId);
+    res.json({ success: true, shiprocketOrderId });
   } catch (err) {
-    console.error('[Shiprocket] Error:', err);
+    console.error('[Shiprocket] Error:', err.message);
     res.status(500).json({ error: 'Shipping creation failed', detail: err.message });
   }
 });
@@ -723,128 +728,131 @@ app.get('/api/shipping/track/:orderId', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EMAIL — Send Order Confirmation via Gmail (Nodemailer + App Password)
+// EMAIL HELPER — reusable, called directly by verify (no localhost)
+// ─────────────────────────────────────────────────────────────────────────────
+async function sendOrderConfirmationEmail({ orderId, userEmail, userName, shiprocketOrderId }) {
+  const nodemailer = await import('nodemailer');
+  const transporter = nodemailer.default.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+  });
+
+  const { data: order } = await supabase
+    .from('orders')
+    .select('total_amount, created_at, razorpay_payment_id, order_items(quantity, price_at_purchase, products(name))')
+    .eq('id', orderId)
+    .single();
+
+  const itemsList = order?.order_items
+    ?.map((i) => `
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #FFD1E3;">${i.products?.name || 'Jewellery Item'}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #FFD1E3;text-align:center;">${i.quantity}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #FFD1E3;text-align:right;font-weight:600;">&#8377;${(Math.round(i.price_at_purchase / 100) * i.quantity).toLocaleString('en-IN')}</td>
+      </tr>`)
+    .join('') || '<tr><td colspan="3" style="padding:8px 12px;">No items</td></tr>';
+
+  const orderShortId = orderId.slice(0, 8).toUpperCase();
+  const totalInr = order?.total_amount ? (order.total_amount / 100).toLocaleString('en-IN') : '-';
+  const orderDate = order?.created_at
+    ? new Date(order.created_at).toLocaleString('en-IN', { dateStyle: 'long', timeStyle: 'short' })
+    : new Date().toLocaleString('en-IN');
+
+  const customerHtml = `
+    <div style="font-family:'Georgia',serif;max-width:600px;margin:auto;background:#fff;border:1px solid #FFD1E3;border-radius:16px;overflow:hidden;">
+      <div style="background:linear-gradient(135deg,#FF2D74,#B3184F);padding:32px;text-align:center;">
+        <div style="font-size:48px;margin-bottom:8px;">&#127881;</div>
+        <h1 style="margin:0;color:#fff;font-size:28px;letter-spacing:1px;">Order Confirmed!</h1>
+        <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:15px;">Thank you, ${userName}!</p>
+      </div>
+      <div style="padding:28px 32px;">
+        <p style="color:#B3184F;font-size:15px;margin-top:0;">Your order has been placed and handed to our shipping partner. You will receive tracking updates soon.</p>
+        <div style="background:#fff5f8;border-radius:10px;padding:16px 20px;margin:20px 0;border:1px solid #FFD1E3;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <span style="color:#888;font-size:13px;">Order ID</span>
+            <span style="color:#B3184F;font-weight:700;font-size:13px;font-family:monospace;">#${orderShortId}</span>
+          </div>
+          ${shiprocketOrderId ? `<div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <span style="color:#888;font-size:13px;">Shiprocket ID</span>
+            <span style="color:#B3184F;font-weight:700;font-size:13px;font-family:monospace;">${shiprocketOrderId}</span>
+          </div>` : ''}
+          <div style="display:flex;justify-content:space-between;">
+            <span style="color:#888;font-size:13px;">Order Date</span>
+            <span style="color:#B3184F;font-size:13px;">${orderDate}</span>
+          </div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+          <thead>
+            <tr style="background:#FFD1E3;">
+              <th style="padding:10px 12px;text-align:left;color:#B3184F;font-size:12px;text-transform:uppercase;">Item</th>
+              <th style="padding:10px 12px;text-align:center;color:#B3184F;font-size:12px;text-transform:uppercase;">Qty</th>
+              <th style="padding:10px 12px;text-align:right;color:#B3184F;font-size:12px;text-transform:uppercase;">Price</th>
+            </tr>
+          </thead>
+          <tbody>${itemsList}</tbody>
+        </table>
+        <div style="text-align:right;padding:12px 0;border-top:2px solid #FFD1E3;">
+          <span style="color:#B3184F;font-size:18px;font-weight:700;">Total: &#8377;${totalInr}</span>
+        </div>
+      </div>
+      <div style="background:#fff5f8;padding:20px 32px;text-align:center;border-top:1px solid #FFD1E3;">
+        <p style="margin:0;font-size:12px;color:#aaa;">Strings &amp; Strands &mdash; Timeless jewellery for every chapter.</p>
+      </div>
+    </div>
+  `;
+
+  const ownerHtml = `
+    <div style="font-family:sans-serif;max-width:600px;margin:auto;">
+      <h2 style="color:#B3184F;">New Order Received</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:14px;">
+        <tr><td style="padding:6px 0;color:#888;width:160px;">Order ID</td><td style="font-weight:600;font-family:monospace;">#${orderShortId} (${orderId})</td></tr>
+        <tr><td style="padding:6px 0;color:#888;">Customer</td><td>${userName} (${userEmail})</td></tr>
+        <tr><td style="padding:6px 0;color:#888;">Total</td><td style="font-weight:700;color:#B3184F;">&#8377;${totalInr}</td></tr>
+        <tr><td style="padding:6px 0;color:#888;">Date</td><td>${orderDate}</td></tr>
+        ${shiprocketOrderId ? `<tr><td style="padding:6px 0;color:#888;">Shiprocket ID</td><td style="font-family:monospace;font-weight:600;">${shiprocketOrderId}</td></tr>` : ''}
+        ${order?.razorpay_payment_id ? `<tr><td style="padding:6px 0;color:#888;">Razorpay Pymt</td><td style="font-family:monospace;font-size:12px;">${order.razorpay_payment_id}</td></tr>` : ''}
+      </table>
+      <h3 style="color:#B3184F;margin-top:20px;">Items</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="background:#FFD1E3;"><th style="padding:8px;text-align:left;">Item</th><th style="padding:8px;text-align:center;">Qty</th><th style="padding:8px;text-align:right;">Price</th></tr></thead>
+        <tbody>${itemsList}</tbody>
+      </table>
+    </div>
+  `;
+
+  const fromAddress = `Strings & Strands <${process.env.GMAIL_USER}>`;
+
+  if (userEmail) {
+    await transporter.sendMail({
+      from: fromAddress,
+      to: userEmail,
+      subject: `Order Confirmed #${orderShortId} - Strings & Strands`,
+      html: customerHtml,
+    });
+    console.log('[Email] Confirmation sent to customer:', userEmail);
+  }
+
+  await transporter.sendMail({
+    from: fromAddress,
+    to: process.env.OWNER_EMAIL,
+    subject: `New Order #${orderShortId} - Rs.${totalInr} from ${userName}`,
+    html: ownerHtml,
+  });
+  console.log('[Email] Notification sent to owner:', process.env.OWNER_EMAIL);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMAIL — Send Order Confirmation (public route, delegates to helper)
 // POST /api/email/order-confirmation
 // Body: { orderId, userEmail, userName, shiprocketOrderId }
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/email/order-confirmation', async (req, res) => {
   try {
     const { orderId, userEmail, userName, shiprocketOrderId } = req.body;
-
-    // Gmail SMTP via Nodemailer + App Password
-    const nodemailer = await import('nodemailer');
-    const transporter = nodemailer.default.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
-      },
-    });
-
-    const { data: order } = await supabase
-      .from('orders')
-      .select('total_amount, created_at, razorpay_payment_id, order_items(quantity, price_at_purchase, products(name))')
-      .eq('id', orderId)
-      .single();
-
-    const itemsList = order?.order_items
-      ?.map((i) => `
-        <tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #FFD1E3;">${i.products?.name || 'Jewellery Item'}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #FFD1E3;text-align:center;">${i.quantity}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #FFD1E3;text-align:right;font-weight:600;">₹${(Math.round(i.price_at_purchase / 100) * i.quantity).toLocaleString('en-IN')}</td>
-        </tr>`)
-      .join('') || '<tr><td colspan="3" style="padding:8px 12px;">No items</td></tr>';
-
-    const orderShortId = orderId.slice(0, 8).toUpperCase();
-    const totalInr = order?.total_amount ? (order.total_amount / 100).toLocaleString('en-IN') : '—';
-    const orderDate = order?.created_at
-      ? new Date(order.created_at).toLocaleString('en-IN', { dateStyle: 'long', timeStyle: 'short' })
-      : new Date().toLocaleString('en-IN');
-
-    const customerHtml = `
-      <div style="font-family:'Georgia',serif;max-width:600px;margin:auto;background:#fff;border:1px solid #FFD1E3;border-radius:16px;overflow:hidden;">
-        <div style="background:linear-gradient(135deg,#FF2D74,#B3184F);padding:32px;text-align:center;">
-          <div style="font-size:48px;margin-bottom:8px;">🎉</div>
-          <h1 style="margin:0;color:#fff;font-size:28px;letter-spacing:1px;">Order Confirmed!</h1>
-          <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:15px;">Thank you, ${userName}!</p>
-        </div>
-        <div style="padding:28px 32px;">
-          <p style="color:#B3184F;font-size:15px;margin-top:0;">Your order has been placed and handed to our shipping partner. You'll receive tracking updates soon.</p>
-          <div style="background:#fff5f8;border-radius:10px;padding:16px 20px;margin:20px 0;border:1px solid #FFD1E3;">
-            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-              <span style="color:#888;font-size:13px;">Order ID</span>
-              <span style="color:#B3184F;font-weight:700;font-size:13px;font-family:monospace;">#${orderShortId}</span>
-            </div>
-            ${shiprocketOrderId ? `<div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-              <span style="color:#888;font-size:13px;">Shiprocket ID</span>
-              <span style="color:#B3184F;font-weight:700;font-size:13px;font-family:monospace;">${shiprocketOrderId}</span>
-            </div>` : ''}
-            <div style="display:flex;justify-content:space-between;">
-              <span style="color:#888;font-size:13px;">Order Date</span>
-              <span style="color:#B3184F;font-size:13px;">${orderDate}</span>
-            </div>
-          </div>
-          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
-            <thead>
-              <tr style="background:#FFD1E3;">
-                <th style="padding:10px 12px;text-align:left;color:#B3184F;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Item</th>
-                <th style="padding:10px 12px;text-align:center;color:#B3184F;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Qty</th>
-                <th style="padding:10px 12px;text-align:right;color:#B3184F;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Price</th>
-              </tr>
-            </thead>
-            <tbody>${itemsList}</tbody>
-          </table>
-          <div style="text-align:right;padding:12px 0;border-top:2px solid #FFD1E3;">
-            <span style="color:#B3184F;font-size:18px;font-weight:700;">Total: ₹${totalInr}</span>
-          </div>
-        </div>
-        <div style="background:#fff5f8;padding:20px 32px;text-align:center;border-top:1px solid #FFD1E3;">
-          <p style="margin:0;font-size:12px;color:#aaa;">Strings &amp; Strands — Timeless jewellery for every chapter.</p>
-          <p style="margin:6px 0 0;font-size:11px;color:#ccc;">If you have any questions, reply to this email.</p>
-        </div>
-      </div>
-    `;
-
-    const ownerHtml = `
-      <div style="font-family:sans-serif;max-width:600px;margin:auto;">
-        <h2 style="color:#B3184F;">🛍 New Order Received</h2>
-        <table style="width:100%;border-collapse:collapse;font-size:14px;">
-          <tr><td style="padding:6px 0;color:#888;width:160px;">Order ID</td><td style="font-weight:600;font-family:monospace;">#${orderShortId} (${orderId})</td></tr>
-          <tr><td style="padding:6px 0;color:#888;">Customer</td><td>${userName} (${userEmail})</td></tr>
-          <tr><td style="padding:6px 0;color:#888;">Total</td><td style="font-weight:700;color:#B3184F;">₹${totalInr}</td></tr>
-          <tr><td style="padding:6px 0;color:#888;">Date</td><td>${orderDate}</td></tr>
-          ${shiprocketOrderId ? `<tr><td style="padding:6px 0;color:#888;">Shiprocket ID</td><td style="font-family:monospace;font-weight:600;">${shiprocketOrderId}</td></tr>` : ''}
-          ${order?.razorpay_payment_id ? `<tr><td style="padding:6px 0;color:#888;">Razorpay Pymt</td><td style="font-family:monospace;font-size:12px;">${order.razorpay_payment_id}</td></tr>` : ''}
-        </table>
-        <h3 style="color:#B3184F;margin-top:20px;">Items</h3>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead><tr style="background:#FFD1E3;"><th style="padding:8px;text-align:left;">Item</th><th style="padding:8px;text-align:center;">Qty</th><th style="padding:8px;text-align:right;">Price</th></tr></thead>
-          <tbody>${itemsList}</tbody>
-        </table>
-      </div>
-    `;
-
-    const fromAddress = `Strings & Strands <${process.env.GMAIL_USER}>`;
-
-    // Send to customer
-    if (userEmail) {
-      await transporter.sendMail({
-        from: fromAddress,
-        to: userEmail,
-        subject: `✨ Order Confirmed #${orderShortId} — Strings & Strands`,
-        html: customerHtml,
-      });
-    }
-
-    // Always notify store owner
-    await transporter.sendMail({
-      from: fromAddress,
-      to: process.env.OWNER_EMAIL,
-      subject: `🛍 New Order #${orderShortId} — ₹${totalInr} from ${userName}`,
-      html: ownerHtml,
-    });
-
+    await sendOrderConfirmationEmail({ orderId, userEmail, userName, shiprocketOrderId });
     res.json({ success: true });
   } catch (err) {
     console.error('[Email/Gmail] Error:', err);
@@ -852,7 +860,7 @@ app.post('/api/email/order-confirmation', async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // START SERVER
 // ─────────────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
