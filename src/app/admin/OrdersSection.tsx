@@ -240,7 +240,8 @@ export default function OrdersSection() {
                     <th>Items</th>
                     <th>Total</th>
                     <th>Payment</th>
-                    <th>Shipping</th>
+                    <th>Shiprocket ID</th>
+                    <th>Tracking</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -255,6 +256,7 @@ export default function OrdersSection() {
                       <td><span className="badge badge-gray">{o.item_count} item{o.item_count !== 1 ? 's' : ''}</span></td>
                       <td style={{ fontWeight: 700, color: '#b3184f' }}>₹{(o.total_amount / 100).toLocaleString('en-IN')}</td>
                       <td><span className={`badge ${statusBadge[o.status] || 'badge-gray'}`}>{o.status}</span></td>
+                      <td style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>{o.shiprocket_order_id || <span style={{ color: '#ccc', fontSize: 12 }}>—</span>}</td>
                       <td>{o.tracking_status ? <span className="badge badge-blue">{o.tracking_status}</span> : <span style={{ color: '#ccc', fontSize: 12 }}>—</span>}</td>
                     </tr>
                   ))}

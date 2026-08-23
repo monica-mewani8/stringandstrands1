@@ -9,6 +9,7 @@ import SearchPage from './SearchPage';
 import CheckoutPage from './CheckoutPage';
 import ProfilePage from './ProfilePage';
 import ResetPasswordPage from './ResetPasswordPage';
+import OrderConfirmPage from './OrderConfirmPage';
 import CartDrawer from './components/CartDrawer';
 import AuthModal from './components/AuthModal';
 import AdminApp from './admin/AdminApp';
@@ -62,6 +63,7 @@ function AppContent() {
           <Route path="/wishlist" element={<WishlistPage />} />
           <Route path="/search" element={<SearchPage wishlist={wishlist} toggleWishlist={handleWishlistToggle} isWishlisted={isWishlisted} />} />
           <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/order-confirm" element={<OrderConfirmPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
         </Routes>

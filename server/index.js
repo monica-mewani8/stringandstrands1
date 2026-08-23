@@ -434,60 +434,75 @@ app.post('/api/payment/verify', async (req, res) => {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-      amount, 
-      userId, 
-      guestEmail, 
-      shippingAddress, 
+      amount,
+      userId,
+      guestEmail,
+      shippingAddress,
       cartItems
     } = req.body;
 
-    // Verify signature
+    // ── Step 1: Verify Razorpay signature ────────────────────────────────────
     const expectedSignature = crypto
       .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest('hex');
 
     if (expectedSignature !== razorpay_signature) {
-      return res.status(400).json({ error: 'Invalid payment signature' });
+      return res.status(400).json({
+        error: 'Invalid payment signature',
+        paymentFailed: true,
+      });
     }
 
-    // Now insert everything to DB (Payment is confirmed)
+    // ── Step 2: Resolve / create user ────────────────────────────────────────
     let finalUserId = userId;
+    let customerEmail = guestEmail || '';
+    let customerName = shippingAddress.full_name || '';
 
     if (!finalUserId) {
-      if (!guestEmail) return res.status(400).json({ error: 'Email is required for guest checkout' });
+      if (!guestEmail) return res.status(400).json({ error: 'Email is required for guest checkout', paymentFailed: false });
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('id')
+        .select('id, email, name')
         .eq('email', guestEmail)
         .single();
-        
+
       if (profile) {
         finalUserId = profile.id;
+        customerEmail = profile.email || guestEmail;
+        customerName = profile.name || shippingAddress.full_name;
       } else {
         const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
           email: guestEmail,
           password: crypto.randomBytes(16).toString('hex'),
           email_confirm: true,
-          user_metadata: { name: shippingAddress.full_name }
+          user_metadata: { name: shippingAddress.full_name },
         });
         if (createError) throw new Error(`Shadow user creation failed: ${createError.message}`);
         finalUserId = newUser.user.id;
       }
+    } else {
+      // Fetch existing user profile details for email
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('email, name')
+        .eq('id', finalUserId)
+        .single();
+      customerEmail = profile?.email || '';
+      customerName = profile?.name || shippingAddress.full_name || '';
     }
 
+    // ── Step 3: Save address ──────────────────────────────────────────────────
     const { email: _excludedEmail, ...addressFields } = shippingAddress;
     const { data: addressData, error: addressError } = await supabase
       .from('addresses')
-      .insert({
-        user_id: finalUserId,
-        ...addressFields
-      })
+      .insert({ user_id: finalUserId, ...addressFields })
       .select()
       .single();
 
     if (addressError) throw new Error(`Address creation failed: ${addressError.message}`);
 
+    // ── Step 4: Create order in Supabase ─────────────────────────────────────
     const amountInPaise = Math.round(amount * 100);
 
     const { data: sbOrder, error: orderError } = await supabase
@@ -507,25 +522,66 @@ app.post('/api/payment/verify', async (req, res) => {
 
     const orderItemsData = cartItems.map(item => ({
       order_id: sbOrder.id,
-      product_id: item.productId || item.id, // Handle if frontend sends .id or .productId
+      product_id: item.productId || item.id,
       quantity: item.quantity,
-      price_at_purchase: Math.round(item.price * 100)
+      price_at_purchase: Math.round(item.price * 100),
     }));
 
     const { error: itemsError } = await supabase.from('order_items').insert(orderItemsData);
     if (itemsError) throw new Error(`Order items creation failed: ${itemsError.message}`);
 
-    // Trigger Shiprocket order creation asynchronously
-    fetch(`http://localhost:${PORT}/api/shipping/create`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId: sbOrder.id })
-    }).catch(err => console.error('[Shiprocket] Failed to trigger async creation:', err));
+    // ── Step 5: Create Shiprocket order (synchronous — must succeed) ─────────
+    let shiprocketOrderId = null;
+    try {
+      const srRes = await fetch(`http://localhost:${PORT}/api/shipping/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: sbOrder.id }),
+      });
+      const srData = await srRes.json();
+      if (srRes.ok && srData.shiprocketOrderId) {
+        shiprocketOrderId = String(srData.shiprocketOrderId);
+      } else {
+        throw new Error(srData.error || 'Shiprocket did not return an order ID');
+      }
+    } catch (srErr) {
+      console.error('[Shiprocket] Order creation failed after payment:', srErr.message);
+      // Payment succeeded but shipping failed — return partial failure so frontend shows refund message
+      return res.status(207).json({
+        success: false,
+        shiprocketFailed: true,
+        orderId: sbOrder.id,
+        razorpayPaymentId: razorpay_payment_id,
+        error: 'Shipping order could not be created. Your payment will be refunded within 7 business days.',
+      });
+    }
 
-    res.json({ success: true, message: 'Payment verified and order confirmed' });
+    // ── Step 6: Send confirmation emails (non-fatal) ──────────────────────────
+    try {
+      await fetch(`http://localhost:${PORT}/api/email/order-confirmation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: sbOrder.id,
+          userEmail: customerEmail,
+          userName: customerName,
+          shiprocketOrderId,
+        }),
+      });
+    } catch (emailErr) {
+      console.error('[Email] Confirmation email failed (non-fatal):', emailErr.message);
+    }
+
+    // ── All done ──────────────────────────────────────────────────────────────
+    res.json({
+      success: true,
+      orderId: sbOrder.id,
+      shiprocketOrderId,
+      razorpayPaymentId: razorpay_payment_id,
+    });
   } catch (err) {
     console.error('[Razorpay] Verify error:', err);
-    res.status(500).json({ error: 'Payment verification failed' });
+    res.status(500).json({ error: 'Payment verification failed', paymentFailed: true });
   }
 });
 
@@ -667,56 +723,131 @@ app.get('/api/shipping/track/:orderId', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EMAIL — Send Order Confirmation via Resend
+// EMAIL — Send Order Confirmation via Gmail (Nodemailer + App Password)
 // POST /api/email/order-confirmation
-// Body: { orderId, userEmail, userName }
+// Body: { orderId, userEmail, userName, shiprocketOrderId }
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/email/order-confirmation', async (req, res) => {
   try {
-    const { orderId, userEmail, userName } = req.body;
+    const { orderId, userEmail, userName, shiprocketOrderId } = req.body;
 
-    // Dynamic import for Resend
-    const { Resend } = await import('resend');
-    const resend = new Resend(process.env.RESEND_API_KEY);
+    // Gmail SMTP via Nodemailer + App Password
+    const nodemailer = await import('nodemailer');
+    const transporter = nodemailer.default.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
+      },
+    });
 
     const { data: order } = await supabase
       .from('orders')
-      .select('total_amount, created_at, order_items(quantity, price_at_purchase, products(name))')
+      .select('total_amount, created_at, razorpay_payment_id, order_items(quantity, price_at_purchase, products(name))')
       .eq('id', orderId)
       .single();
 
     const itemsList = order?.order_items
-      ?.map((i) => `<li>${i.products?.name} × ${i.quantity} — ₹${(i.price_at_purchase * i.quantity).toLocaleString('en-IN')}</li>`)
-      .join('') || '';
+      ?.map((i) => `
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #FFD1E3;">${i.products?.name || 'Jewellery Item'}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #FFD1E3;text-align:center;">${i.quantity}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #FFD1E3;text-align:right;font-weight:600;">₹${(Math.round(i.price_at_purchase / 100) * i.quantity).toLocaleString('en-IN')}</td>
+        </tr>`)
+      .join('') || '<tr><td colspan="3" style="padding:8px 12px;">No items</td></tr>';
 
-    await resend.emails.send({
-      from: 'Strings & Strands <orders@stringsandstrands.com>',
-      to: userEmail,
-      subject: `Order Confirmed — #${orderId.slice(0, 8).toUpperCase()}`,
-      html: `
-        <div style="font-family: Georgia, serif; max-width: 600px; margin: auto; color: #B3184F;">
-          <h1 style="color: #B3184F;">Thank you, ${userName}! 🎉</h1>
-          <p>Your order has been confirmed and will be shipped soon.</p>
-          <h3>Order Summary</h3>
-          <ul>${itemsList}</ul>
-          <p><strong>Total: ₹${order?.total_amount?.toLocaleString('en-IN')}</strong></p>
-          <hr style="border-color: #FFD1E3;" />
-          <p style="font-size: 12px; color: #888;">Strings & Strands — Timeless jewellery for every chapter.</p>
+    const orderShortId = orderId.slice(0, 8).toUpperCase();
+    const totalInr = order?.total_amount ? (order.total_amount / 100).toLocaleString('en-IN') : '—';
+    const orderDate = order?.created_at
+      ? new Date(order.created_at).toLocaleString('en-IN', { dateStyle: 'long', timeStyle: 'short' })
+      : new Date().toLocaleString('en-IN');
+
+    const customerHtml = `
+      <div style="font-family:'Georgia',serif;max-width:600px;margin:auto;background:#fff;border:1px solid #FFD1E3;border-radius:16px;overflow:hidden;">
+        <div style="background:linear-gradient(135deg,#FF2D74,#B3184F);padding:32px;text-align:center;">
+          <div style="font-size:48px;margin-bottom:8px;">🎉</div>
+          <h1 style="margin:0;color:#fff;font-size:28px;letter-spacing:1px;">Order Confirmed!</h1>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:15px;">Thank you, ${userName}!</p>
         </div>
-      `,
-    });
+        <div style="padding:28px 32px;">
+          <p style="color:#B3184F;font-size:15px;margin-top:0;">Your order has been placed and handed to our shipping partner. You'll receive tracking updates soon.</p>
+          <div style="background:#fff5f8;border-radius:10px;padding:16px 20px;margin:20px 0;border:1px solid #FFD1E3;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <span style="color:#888;font-size:13px;">Order ID</span>
+              <span style="color:#B3184F;font-weight:700;font-size:13px;font-family:monospace;">#${orderShortId}</span>
+            </div>
+            ${shiprocketOrderId ? `<div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <span style="color:#888;font-size:13px;">Shiprocket ID</span>
+              <span style="color:#B3184F;font-weight:700;font-size:13px;font-family:monospace;">${shiprocketOrderId}</span>
+            </div>` : ''}
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:#888;font-size:13px;">Order Date</span>
+              <span style="color:#B3184F;font-size:13px;">${orderDate}</span>
+            </div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+            <thead>
+              <tr style="background:#FFD1E3;">
+                <th style="padding:10px 12px;text-align:left;color:#B3184F;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Item</th>
+                <th style="padding:10px 12px;text-align:center;color:#B3184F;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Qty</th>
+                <th style="padding:10px 12px;text-align:right;color:#B3184F;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Price</th>
+              </tr>
+            </thead>
+            <tbody>${itemsList}</tbody>
+          </table>
+          <div style="text-align:right;padding:12px 0;border-top:2px solid #FFD1E3;">
+            <span style="color:#B3184F;font-size:18px;font-weight:700;">Total: ₹${totalInr}</span>
+          </div>
+        </div>
+        <div style="background:#fff5f8;padding:20px 32px;text-align:center;border-top:1px solid #FFD1E3;">
+          <p style="margin:0;font-size:12px;color:#aaa;">Strings &amp; Strands — Timeless jewellery for every chapter.</p>
+          <p style="margin:6px 0 0;font-size:11px;color:#ccc;">If you have any questions, reply to this email.</p>
+        </div>
+      </div>
+    `;
 
-    // Also notify owner
-    await resend.emails.send({
-      from: 'Strings & Strands <orders@stringsandstrands.com>',
+    const ownerHtml = `
+      <div style="font-family:sans-serif;max-width:600px;margin:auto;">
+        <h2 style="color:#B3184F;">🛍 New Order Received</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+          <tr><td style="padding:6px 0;color:#888;width:160px;">Order ID</td><td style="font-weight:600;font-family:monospace;">#${orderShortId} (${orderId})</td></tr>
+          <tr><td style="padding:6px 0;color:#888;">Customer</td><td>${userName} (${userEmail})</td></tr>
+          <tr><td style="padding:6px 0;color:#888;">Total</td><td style="font-weight:700;color:#B3184F;">₹${totalInr}</td></tr>
+          <tr><td style="padding:6px 0;color:#888;">Date</td><td>${orderDate}</td></tr>
+          ${shiprocketOrderId ? `<tr><td style="padding:6px 0;color:#888;">Shiprocket ID</td><td style="font-family:monospace;font-weight:600;">${shiprocketOrderId}</td></tr>` : ''}
+          ${order?.razorpay_payment_id ? `<tr><td style="padding:6px 0;color:#888;">Razorpay Pymt</td><td style="font-family:monospace;font-size:12px;">${order.razorpay_payment_id}</td></tr>` : ''}
+        </table>
+        <h3 style="color:#B3184F;margin-top:20px;">Items</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="background:#FFD1E3;"><th style="padding:8px;text-align:left;">Item</th><th style="padding:8px;text-align:center;">Qty</th><th style="padding:8px;text-align:right;">Price</th></tr></thead>
+          <tbody>${itemsList}</tbody>
+        </table>
+      </div>
+    `;
+
+    const fromAddress = `Strings & Strands <${process.env.GMAIL_USER}>`;
+
+    // Send to customer
+    if (userEmail) {
+      await transporter.sendMail({
+        from: fromAddress,
+        to: userEmail,
+        subject: `✨ Order Confirmed #${orderShortId} — Strings & Strands`,
+        html: customerHtml,
+      });
+    }
+
+    // Always notify store owner
+    await transporter.sendMail({
+      from: fromAddress,
       to: process.env.OWNER_EMAIL,
-      subject: `New Order #${orderId.slice(0, 8).toUpperCase()} — ₹${order?.total_amount?.toLocaleString('en-IN')}`,
-      html: `<p>New order received from ${userEmail}. Order ID: ${orderId}.</p>`,
+      subject: `🛍 New Order #${orderShortId} — ₹${totalInr} from ${userName}`,
+      html: ownerHtml,
     });
 
     res.json({ success: true });
   } catch (err) {
-    console.error('[Resend] Email error:', err);
+    console.error('[Email/Gmail] Error:', err);
     res.status(500).json({ error: 'Email sending failed' });
   }
 });

@@ -99,17 +99,52 @@ export default function CheckoutPage() {
               })
             });
             const verifyData = await verifyRes.json();
+
             if (verifyData.success) {
+              // All good — order + Shiprocket ID created
               if (!user) localStorage.setItem('guest_address', JSON.stringify(shipping));
               await clearCart();
-              alert('Payment successful! Your order has been placed.');
-              navigate('/');
+              navigate('/order-confirm', {
+                state: {
+                  success: true,
+                  orderId: verifyData.orderId,
+                  shiprocketOrderId: verifyData.shiprocketOrderId,
+                  razorpayPaymentId: verifyData.razorpayPaymentId,
+                  customerName: shipping.full_name || user?.user_metadata?.name || '',
+                },
+              });
+            } else if (verifyData.shiprocketFailed) {
+              // Payment ok but Shiprocket failed
+              if (!user) localStorage.setItem('guest_address', JSON.stringify(shipping));
+              await clearCart();
+              navigate('/order-confirm', {
+                state: {
+                  success: false,
+                  shiprocketFailed: true,
+                  orderId: verifyData.orderId,
+                  razorpayPaymentId: verifyData.razorpayPaymentId,
+                  error: verifyData.error,
+                },
+              });
             } else {
-              alert('Payment verification failed. Please contact support.');
+              // General failure
+              navigate('/order-confirm', {
+                state: {
+                  success: false,
+                  paymentFailed: verifyData.paymentFailed ?? true,
+                  error: verifyData.error || 'Payment verification failed. Please contact support.',
+                },
+              });
             }
           } catch (err) {
             console.error('Verify error:', err);
-            alert('Payment verification error.');
+            navigate('/order-confirm', {
+              state: {
+                success: false,
+                paymentFailed: true,
+                error: 'An unexpected error occurred. If any amount was deducted, it will be refunded within 7 business days.',
+              },
+            });
           }
         },
         prefill: {
