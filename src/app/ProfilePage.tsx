@@ -59,7 +59,6 @@ export default function ProfilePage() {
         .from('addresses')
         .select('*')
         .eq('user_id', user.id)
-        .eq('is_deleted', false)
         .order('created_at', { ascending: false });
       if (addressData) setAddresses(addressData);
 
@@ -121,12 +120,12 @@ export default function ProfilePage() {
 
   const handleDeleteAddress = async (id: string) => {
     try {
-      const { error } = await supabase.from('addresses').update({ is_deleted: true }).eq('id', id);
+      const { error } = await supabase.from('addresses').delete().eq('id', id);
       if (error) throw error;
       setAddresses(addresses.filter(a => a.id !== id));
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Failed to delete address.");
+      alert(err?.message?.includes('foreign key') ? "Cannot delete this address as it is associated with a past order." : "Failed to delete address.");
     }
   };
 
@@ -225,15 +224,22 @@ export default function ProfilePage() {
                                 <p className="text-sm font-bold text-[#FF2D74]">₹{(order.total_amount / 100).toLocaleString()}</p>
                               </div>
                               <div>
-                                <p className="text-xs text-[#B3184F] font-bold uppercase tracking-wider">Status</p>
-                                <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold capitalize ${
-                                  order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                  order.status === 'paid' ? 'bg-green-100 text-green-700' :
-                                  order.status === 'shipped' ? 'bg-blue-100 text-blue-700' :
-                                  'bg-gray-100 text-gray-700'
-                                }`}>
-                                  {order.status}
-                                </span>
+                                <p className="text-xs text-[#B3184F] font-bold uppercase tracking-wider">Order Status</p>
+                                <div className="flex flex-col gap-1 mt-1">
+                                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold capitalize text-center ${
+                                    order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                    order.status === 'paid' ? 'bg-green-100 text-green-700' :
+                                    order.status === 'shipped' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {order.status}
+                                  </span>
+                                  {order.tracking_status && (
+                                    <span className="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase text-center bg-blue-50 text-blue-600 border border-blue-100">
+                                      {order.tracking_status}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                             <div className="space-y-4">

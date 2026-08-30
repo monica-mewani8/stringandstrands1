@@ -23,7 +23,15 @@ export default function SearchPage({ wishlist, toggleWishlist }: SearchPageProps
     supabase.from('products').select('*')
       .or(`name.ilike.%${q}%,category.ilike.%${q}%`)
       .then(({ data }) => {
-        if (!cancelled) { setResults(data || []); setLoading(false); }
+        if (!cancelled) {
+          const sorted = (data || []).sort((a: any, b: any) => {
+            const aInStock = a.stock > 0 ? 1 : 0;
+            const bInStock = b.stock > 0 ? 1 : 0;
+            return bInStock - aInStock;
+          });
+          setResults(sorted); 
+          setLoading(false); 
+        }
       });
     return () => { cancelled = true; };
   }, [q]);

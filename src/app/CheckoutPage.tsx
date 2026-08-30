@@ -26,7 +26,7 @@ export default function CheckoutPage() {
   // Load saved addresses
   useEffect(() => {
     if (user) {
-      supabase.from('addresses').select('*').eq('user_id', user.id).eq('is_deleted', false).then(({ data }) => {
+      supabase.from('addresses').select('*').eq('user_id', user.id).then(({ data }) => {
         if (data && data.length > 0) setSavedAddresses(data);
       });
     } else {

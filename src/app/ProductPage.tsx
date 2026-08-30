@@ -42,6 +42,7 @@ export default function ProductPage({ wishlist, toggleWishlist, isWishlisted }: 
   const [addedToCart, setAddedToCart] = useState(false);
   const [product, setProduct] = useState<ProductData | null>(null);
   const [stockCount, setStockCount] = useState<number>(50);
+  const [variants, setVariants] = useState<{id: string, color: string, title: string}[]>([]);
 
   const wished = productId ? (wishlist.has(productId) || (isWishlisted ? isWishlisted(productId) : false)) : false;
 
@@ -60,6 +61,29 @@ export default function ProductPage({ wishlist, toggleWishlist, isWishlisted }: 
           reviews: [],
           rating: data.rating,
         });
+
+        // Find variants by base name
+        const match = data.name.match(/^(.*?)\s*\(([^)]+)\)$/);
+        const baseName = match ? match[1] : data.name;
+        
+        supabase.from('products')
+          .select('id, name, color')
+          .ilike('name', `${baseName}%`)
+          .then(({ data: variantData }) => {
+            if (variantData) {
+              const validVariants = variantData
+                .filter((v: any) => v.name === baseName || v.name.startsWith(baseName + ' ('))
+                .map((v: any) => {
+                  const m = v.name.match(/\(([^)]+)\)$/);
+                  return { id: v.id, color: m ? m[1] : (v.color || 'Standard'), title: v.name };
+                });
+              if (validVariants.length > 1) {
+                setVariants(validVariants);
+              } else {
+                setVariants([]);
+              }
+            }
+          });
       }
     });
   }, [productId]);
@@ -184,6 +208,26 @@ export default function ProductPage({ wishlist, toggleWishlist, isWishlisted }: 
             <p className="text-xs text-gray-400 mb-6">
               Tax included. <span className="underline cursor-pointer hover:text-gray-600">Shipping calculated</span> at checkout.
             </p>
+
+            {/* Color Variants */}
+            {variants.length > 1 && (
+              <div className="mb-6">
+                <span className="block text-sm font-semibold text-gray-700 mb-2">Color Options</span>
+                <div className="flex flex-wrap gap-2">
+                  {variants.map(v => (
+                    <Link key={v.id} to={`/product/${v.id}`}>
+                      <button className={`px-4 py-2 text-sm font-medium rounded-full border transition-all ${
+                        v.id === productId 
+                          ? 'border-[#FF2D74] bg-[#FFEAF2] text-[#FF2D74]' 
+                          : 'border-gray-200 text-gray-600 hover:border-gray-400'
+                      }`}>
+                        {v.color}
+                      </button>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Quantity */}
             <div className="mb-6">

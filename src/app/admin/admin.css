@@ -316,6 +316,20 @@ select.admin-input { cursor: pointer; }
   position: relative;
 }
 
+.admin-modal::-webkit-scrollbar {
+  width: 6px;
+}
+.admin-modal::-webkit-scrollbar-track {
+  background: transparent;
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+.admin-modal::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 20px;
+}
+
+
 .admin-modal-sm {
   max-width: 420px;
 }

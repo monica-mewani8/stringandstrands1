@@ -79,6 +79,12 @@ export default function CategoryPage({ wishlist, toggleWishlist, type }: Categor
         badge: p.is_new ? 'New' : (p.is_bestseller ? 'Best' : undefined),
         stock: p.stock,
       }));
+      mapped.sort((a, b) => {
+        const aInStock = a.stock > 0 ? 1 : 0;
+        const bInStock = b.stock > 0 ? 1 : 0;
+        return bInStock - aInStock;
+      });
+
       setProducts(mapped);
       setLoading(false);
     }

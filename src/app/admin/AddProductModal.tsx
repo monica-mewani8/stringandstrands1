@@ -3,6 +3,14 @@ import { supabase } from '../../lib/supabase';
 import { useToast } from './Toast';
 
 const CATEGORIES = ['Earrings', 'Necklace', 'Ring', 'Bracelets', 'Bangles', 'Sets', 'Hair Accessories'];
+
+// Must match the `id` values in OCCASION_TILES (HomePage.tsx) so category filtering works
+const OCCASIONS = [
+  { id: 'everyday',     label: 'Everyday' },
+  { id: 'office',       label: 'Office' },
+  { id: 'celebrations', label: 'Celebrations' },
+  { id: 'gift-for-her', label: 'Gift for Her' },
+];
 const API = import.meta.env.PROD ? '' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001');
 
 async function getAdminToken() {
@@ -32,12 +40,43 @@ export default function AddProductModal({ onClose, onSaved, editProduct }: Props
     is_new: editProduct?.is_new ?? true,
   });
 
+  // Parse existing occasion string into a set of selected IDs for the multi-select
+  const [selectedOccasions, setSelectedOccasions] = useState<Set<string>>(() => {
+    if (!editProduct?.occasion) return new Set();
+    const raw = editProduct.occasion as string;
+    const matched = OCCASIONS
+      .map(o => o.id)
+      .filter(id => raw.toLowerCase().includes(id.toLowerCase()));
+    return new Set(matched.length > 0 ? matched : []);
+  });
+
+  const toggleOccasion = (id: string) => {
+    setSelectedOccasions(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      // Keep form.occasion in sync as a comma-separated string of IDs
+      const newOccasionStr = [...next].join(', ');
+      setForm(f => ({ ...f, occasion: newOccasionStr }));
+      return next;
+    });
+  };
+
   const [existingImages, setExistingImages] = useState<string[]>(editProduct?.images || []);
   const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
   const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
+
+  // Multi-color advanced state
+  const colorsArray = form.color ? form.color.split(',').map(c => c.trim()).filter(Boolean) : [];
+  const isMultiColor = !isEdit && colorsArray.length > 1;
+  const [variantFiles, setVariantFiles] = useState<Record<string, File[]>>({});
+  const [variantPreviews, setVariantPreviews] = useState<Record<string, string[]>>({});
+
   const [saving, setSaving] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
+  const [dragOver, setDragOver] = useState<string | boolean>(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  
+  // Keep track of which variant triggered the file input
+  const [activeVariantForUpload, setActiveVariantForUpload] = useState<string | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -45,35 +84,53 @@ export default function AddProductModal({ onClose, onSaved, editProduct }: Props
     setForm(f => ({ ...f, [name]: type === 'checkbox' ? checked : value }));
   };
 
-  const addFiles = useCallback((files: File[]) => {
+  const addFiles = useCallback((files: File[], variantColor?: string) => {
     const valid = files.filter(f => f.type.startsWith('image/'));
-    setNewImageFiles(prev => [...prev, ...valid]);
-    valid.forEach(f => {
-      const reader = new FileReader();
-      reader.onload = e => setNewImagePreviews(prev => [...prev, e.target?.result as string]);
-      reader.readAsDataURL(f);
-    });
+    
+    if (variantColor) {
+      setVariantFiles(prev => ({ ...prev, [variantColor]: [...(prev[variantColor] || []), ...valid] }));
+      valid.forEach(f => {
+        const reader = new FileReader();
+        reader.onload = e => setVariantPreviews(prev => ({ 
+          ...prev, 
+          [variantColor]: [...(prev[variantColor] || []), e.target?.result as string] 
+        }));
+        reader.readAsDataURL(f);
+      });
+    } else {
+      setNewImageFiles(prev => [...prev, ...valid]);
+      valid.forEach(f => {
+        const reader = new FileReader();
+        reader.onload = e => setNewImagePreviews(prev => [...prev, e.target?.result as string]);
+        reader.readAsDataURL(f);
+      });
+    }
   }, []);
 
-  const onDrop = (e: React.DragEvent) => {
+  const onDrop = (e: React.DragEvent, variantColor?: string) => {
     e.preventDefault();
     setDragOver(false);
-    addFiles(Array.from(e.dataTransfer.files));
+    addFiles(Array.from(e.dataTransfer.files), variantColor);
   };
 
-  const removeNewImage = (i: number) => {
-    setNewImageFiles(prev => prev.filter((_, idx) => idx !== i));
-    setNewImagePreviews(prev => prev.filter((_, idx) => idx !== i));
+  const removeNewImage = (i: number, variantColor?: string) => {
+    if (variantColor) {
+      setVariantFiles(prev => ({ ...prev, [variantColor]: prev[variantColor].filter((_, idx) => idx !== i) }));
+      setVariantPreviews(prev => ({ ...prev, [variantColor]: prev[variantColor].filter((_, idx) => idx !== i) }));
+    } else {
+      setNewImageFiles(prev => prev.filter((_, idx) => idx !== i));
+      setNewImagePreviews(prev => prev.filter((_, idx) => idx !== i));
+    }
   };
 
   const removeExistingImage = (i: number) => {
     setExistingImages(prev => prev.filter((_, idx) => idx !== i));
   };
 
-  async function uploadImages(): Promise<string[]> {
+  async function uploadFilesBatch(files: File[]): Promise<string[]> {
     const token = await getAdminToken();
     const urls: string[] = [];
-    for (const file of newImageFiles) {
+    for (const file of files) {
       const base64 = await new Promise<string>((res, rej) => {
         const r = new FileReader();
         r.onload = e => res((e.target!.result as string).split(',')[1]);
@@ -98,16 +155,27 @@ export default function AddProductModal({ onClose, onSaved, editProduct }: Props
     setSaving(true);
     try {
       const token = await getAdminToken();
-      const uploadedUrls = await uploadImages();
-      const images = [...existingImages, ...uploadedUrls];
-      const payload = {
+      
+      const payload: any = {
         ...form,
         price: Number(form.price),
         discounted_price: Number(form.discounted_price) || Number(form.price),
         stock: Number(form.stock),
         rating: Number(form.rating) || 5.0,
-        images,
       };
+
+      if (isMultiColor) {
+        const variants = [];
+        for (const color of colorsArray) {
+          const files = variantFiles[color] || [];
+          const uploadedUrls = await uploadFilesBatch(files);
+          variants.push({ color, images: uploadedUrls });
+        }
+        payload.variants = variants;
+      } else {
+        const uploadedUrls = await uploadFilesBatch(newImageFiles);
+        payload.images = [...existingImages, ...uploadedUrls];
+      }
 
       const url = isEdit
         ? `${API}/api/admin/products/${editProduct.id}`
@@ -177,13 +245,66 @@ export default function AddProductModal({ onClose, onSaved, editProduct }: Props
             </div>
 
             <div className="admin-field">
-              <label className="admin-label">Color</label>
-              <input className="admin-input" name="color" value={form.color} onChange={handleChange} placeholder="e.g. Gold" />
+              <label className="admin-label">Color(s)</label>
+              <input className="admin-input" name="color" value={form.color} onChange={handleChange} placeholder="e.g. Gold, Silver, Rose Gold" />
+              <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>Separate multiple colors with commas to auto-create variants.</div>
             </div>
 
             <div className="admin-field">
               <label className="admin-label">Occasion</label>
-              <input className="admin-input" name="occasion" value={form.occasion} onChange={handleChange} placeholder="e.g. Wedding, Casual" />
+              <div style={{
+                border: '1px solid #e8b4c8',
+                borderRadius: 8,
+                padding: '10px 12px',
+                background: '#fff',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}>
+                {OCCASIONS.map(({ id, label }) => (
+                  <label
+                    key={id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: selectedOccasions.has(id) ? '#c0386b' : '#555',
+                    }}
+                  >
+                    <div style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 4,
+                      border: `2px solid ${selectedOccasions.has(id) ? '#c0386b' : '#ddd'}`,
+                      background: selectedOccasions.has(id) ? '#c0386b' : '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      transition: 'all 0.15s',
+                    }}>
+                      {selectedOccasions.has(id) && (
+                        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                          <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={selectedOccasions.has(id)}
+                      onChange={() => toggleOccasion(id)}
+                      style={{ display: 'none' }}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              {selectedOccasions.size === 0 && (
+                <p style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>Select at least one occasion</p>
+              )}
             </div>
 
             <div className="admin-field">
@@ -209,40 +330,76 @@ export default function AddProductModal({ onClose, onSaved, editProduct }: Props
 
             <div className="admin-field full">
               <label className="admin-label">Product Images</label>
-              {existingImages.length > 0 && (
-                <div style={{ marginBottom: 10 }}>
-                  <p style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>Existing images:</p>
-                  <div className="upload-previews">
-                    {existingImages.map((url, i) => (
-                      <div key={i} className="upload-preview">
-                        <img src={url} alt="" />
-                        <button className="upload-preview-del" onClick={() => removeExistingImage(i)} type="button">✕</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div
-                className={`upload-zone ${dragOver ? 'drag-over' : ''}`}
-                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={onDrop}
-                onClick={() => fileRef.current?.click()}
-              >
-                <svg width="28" height="28" fill="none" stroke="#ffa0c0" strokeWidth="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                <p>Drag & drop images here, or click to browse</p>
-              </div>
               <input ref={fileRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
-                onChange={e => addFiles(Array.from(e.target.files || []))} />
-              {newImagePreviews.length > 0 && (
-                <div className="upload-previews" style={{ marginTop: 10 }}>
-                  {newImagePreviews.map((src, i) => (
-                    <div key={i} className="upload-preview">
-                      <img src={src} alt="" />
-                      <button className="upload-preview-del" onClick={() => removeNewImage(i)} type="button">✕</button>
+                onChange={e => addFiles(Array.from(e.target.files || []), activeVariantForUpload || undefined)} />
+
+              {isMultiColor ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {colorsArray.map(color => (
+                    <div key={color} style={{ border: '1px solid #ffd1e3', borderRadius: 8, padding: 16, background: '#fff9fb' }}>
+                      <label className="admin-label" style={{ color: '#b3184f', marginBottom: 12 }}>Images for {color}</label>
+                      
+                      <div
+                        className={`upload-zone ${dragOver === color ? 'drag-over' : ''}`}
+                        onDragOver={e => { e.preventDefault(); setDragOver(color); }}
+                        onDragLeave={() => setDragOver(false)}
+                        onDrop={(e) => onDrop(e, color)}
+                        onClick={() => { setActiveVariantForUpload(color); fileRef.current?.click(); }}
+                      >
+                        <svg width="28" height="28" fill="none" stroke="#ffa0c0" strokeWidth="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                        <p>Drag & drop images for {color}</p>
+                      </div>
+                      
+                      {(variantPreviews[color] || []).length > 0 && (
+                        <div className="upload-previews" style={{ marginTop: 10 }}>
+                          {(variantPreviews[color] || []).map((src, i) => (
+                            <div key={i} className="upload-preview">
+                              <img src={src} alt="" />
+                              <button className="upload-preview-del" onClick={() => removeNewImage(i, color)} type="button">✕</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
+              ) : (
+                <>
+                  {existingImages.length > 0 && (
+                    <div style={{ marginBottom: 10 }}>
+                      <p style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>Existing images:</p>
+                      <div className="upload-previews">
+                        {existingImages.map((url, i) => (
+                          <div key={i} className="upload-preview">
+                            <img src={url} alt="" />
+                            <button className="upload-preview-del" onClick={() => removeExistingImage(i)} type="button">✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div
+                    className={`upload-zone ${dragOver === true ? 'drag-over' : ''}`}
+                    onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={(e) => onDrop(e)}
+                    onClick={() => { setActiveVariantForUpload(null); fileRef.current?.click(); }}
+                  >
+                    <svg width="28" height="28" fill="none" stroke="#ffa0c0" strokeWidth="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    <p>Drag & drop images here, or click to browse</p>
+                  </div>
+                  
+                  {newImagePreviews.length > 0 && (
+                    <div className="upload-previews" style={{ marginTop: 10 }}>
+                      {newImagePreviews.map((src, i) => (
+                        <div key={i} className="upload-preview">
+                          <img src={src} alt="" />
+                          <button className="upload-preview-del" onClick={() => removeNewImage(i)} type="button">✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

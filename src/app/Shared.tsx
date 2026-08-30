@@ -304,11 +304,12 @@ export function useHomeProducts() {
         badge: p.is_new ? 'New' : (p.is_bestseller ? 'Best' : undefined),
         stock: p.stock,
       });
-      const newArr = shuffleArray(data.filter((p: any) => p.is_new)).slice(0, 8).map(toProduct);
-      const best = shuffleArray(data.filter((p: any) => p.is_bestseller)).slice(0, 8).map(toProduct);
+      const availableData = data.filter((p: any) => p.stock > 0);
+      const newArr = shuffleArray(availableData.filter((p: any) => p.is_new)).slice(0, 8).map(toProduct);
+      const best = shuffleArray(availableData.filter((p: any) => p.is_bestseller)).slice(0, 8).map(toProduct);
       // fallback: if no flags, use all
-      setNewArrivals(newArr.length > 0 ? newArr : shuffleArray(data).slice(0, 8).map(toProduct));
-      setBestsellers(best.length > 0 ? best : shuffleArray(data).slice(8, 16).map(toProduct));
+      setNewArrivals(newArr.length > 0 ? newArr : shuffleArray(availableData).slice(0, 8).map(toProduct));
+      setBestsellers(best.length > 0 ? best : shuffleArray(availableData).slice(8, 16).map(toProduct));
       setLoading(false);
     }
     load();

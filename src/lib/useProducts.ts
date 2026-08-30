@@ -68,7 +68,12 @@ export function useProducts(options?: {
         const { data, error: err } = await query;
         if (cancelled) return;
         if (err) throw err;
-        setProducts(data || []);
+        const sorted = (data || []).sort((a: any, b: any) => {
+          const aInStock = a.stock > 0 ? 1 : 0;
+          const bInStock = b.stock > 0 ? 1 : 0;
+          return bInStock - aInStock;
+        });
+        setProducts(sorted);
       } catch (e: any) {
         if (!cancelled) setError(e.message);
       } finally {

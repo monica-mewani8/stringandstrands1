@@ -23,7 +23,12 @@ export default function WishlistPage() {
       const ids = Array.from(wishlist);
       const { data } = await supabase.from('products').select('*').in('id', ids);
       if (!cancelled) {
-        setWishlistProducts(data || []);
+        const sorted = (data || []).sort((a: any, b: any) => {
+          const aInStock = a.stock > 0 ? 1 : 0;
+          const bInStock = b.stock > 0 ? 1 : 0;
+          return bInStock - aInStock;
+        });
+        setWishlistProducts(sorted);
         setLoading(false);
       }
     }

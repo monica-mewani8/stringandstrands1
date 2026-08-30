@@ -126,13 +126,31 @@ app.get('/api/admin/products', requireAdmin, async (req, res) => {
 app.post('/api/admin/products', requireAdmin, async (req, res) => {
   try {
     const product = req.body;
-    if (!product.id) {
-      product.id = product.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now();
+    const baseId = product.id || product.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now();
+    
+    if (product.variants && product.variants.length > 0) {
+      const inserts = product.variants.map((v) => {
+        // Remove variants array from the base product spread
+        const { variants, ...baseProduct } = product; 
+        return {
+          ...baseProduct,
+          id: `${baseId}-${v.color.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+          name: `${product.name} (${v.color})`,
+          color: v.color,
+          images: v.images
+        };
+      });
+      const { data, error } = await supabase.from('products').insert(inserts).select();
+      if (error) throw error;
+      await logAdminAction(req.adminUser.id, 'create_product', 'product', 'bulk', `Created ${product.variants.length} variants for: ${product.name}`);
+      res.json({ product: data[0] }); // Return first one to satisfy frontend
+    } else {
+      product.id = baseId;
+      const { data, error } = await supabase.from('products').insert(product).select().single();
+      if (error) throw error;
+      await logAdminAction(req.adminUser.id, 'create_product', 'product', data.id, `Created: ${data.name}`);
+      res.json({ product: data });
     }
-    const { data, error } = await supabase.from('products').insert(product).select().single();
-    if (error) throw error;
-    await logAdminAction(req.adminUser.id, 'create_product', 'product', data.id, `Created: ${data.name}`);
-    res.json({ product: data });
   } catch (err) {
     console.error('[Admin] Create product error:', err);
     res.status(500).json({ error: err.message });
@@ -281,12 +299,10 @@ app.get('/api/admin/orders', requireAdmin, async (req, res) => {
 
     let query = supabase
       .from('orders')
-      .select(`
-        id, status, total_amount, created_at, razorpay_payment_id,
-        razorpay_order_id, tracking_status, shiprocket_order_id,
-        user_profiles!orders_user_id_fkey(name, email),
-        order_items(id)
-      `, { count: 'exact' })
+      .select(
+        'id, status, total_amount, created_at, razorpay_payment_id, razorpay_order_id, tracking_status, shiprocket_order_id, user_id, order_items(id)',
+        { count: 'exact' }
+      )
       .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1);
 
@@ -297,11 +313,22 @@ app.get('/api/admin/orders', requireAdmin, async (req, res) => {
     const { data, error, count } = await query;
     if (error) throw error;
 
+    // Fetch user profiles separately (avoids FK join schema cache issue)
+    const userIds = [...new Set((data || []).map(o => o.user_id).filter(Boolean))];
+    let profileMap = {};
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('user_profiles')
+        .select('id, name, email')
+        .in('id', userIds);
+      for (const p of (profiles || [])) profileMap[p.id] = p;
+    }
+
     const orders = (data || []).map(o => ({
       ...o,
       item_count: o.order_items?.length || 0,
-      customer_name: o.user_profiles?.name || o.user_profiles?.email || 'Guest',
-      customer_email: o.user_profiles?.email,
+      customer_name: profileMap[o.user_id]?.name || profileMap[o.user_id]?.email || 'Guest',
+      customer_email: profileMap[o.user_id]?.email || '',
     }));
 
     res.json({ orders, total: count });
@@ -319,7 +346,6 @@ app.get('/api/admin/orders/:id', requireAdmin, async (req, res) => {
       .from('orders')
       .select(`
         *,
-        user_profiles!orders_user_id_fkey(name, email, phone),
         addresses(*),
         order_items(
           id, quantity, price_at_purchase, product_name_snapshot, price_inr_snapshot,
@@ -330,7 +356,19 @@ app.get('/api/admin/orders/:id', requireAdmin, async (req, res) => {
       .single();
 
     if (error) throw error;
-    res.json({ order: data });
+
+    // Fetch user profile separately
+    let userProfile = null;
+    if (data?.user_id) {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('name, email, phone')
+        .eq('id', data.user_id)
+        .single();
+      userProfile = profile;
+    }
+
+    res.json({ order: { ...data, user_profiles: userProfile } });
   } catch (err) {
     console.error('[Admin] Order detail error:', err);
     res.status(500).json({ error: err.message });
@@ -582,7 +620,7 @@ async function createShiprocketOrder(orderId) {
     .select(`
       *,
       addresses(*),
-      order_items(quantity, price_at_purchase, product_id, products(name, weight_grams))
+      order_items(quantity, price_at_purchase, product_id, products(name))
     `)
     .eq('id', orderId)
     .single();
@@ -609,11 +647,17 @@ async function createShiprocketOrder(orderId) {
   // Amounts: Razorpay stores in paise, Shiprocket expects rupees
   const totalInRupees = Math.round(order.total_amount / 100);
 
+  // Shiprocket requires first + last name separately
+  const nameParts = (addr.full_name || 'Customer').trim().split(/\s+/);
+  const firstName = nameParts[0];
+  const lastName = nameParts.slice(1).join(' ') || '.';
+
   const payload = {
     order_id: orderId,
     order_date: new Date().toISOString().split('T')[0],
-    pickup_location: 'Primary',
-    billing_customer_name: addr.full_name,
+    pickup_location: 'Kaj Organics',
+    billing_customer_name: firstName,
+    billing_last_name: lastName,
     billing_address: addr.address_line1,
     billing_address_2: addr.address_line2 || '',
     billing_city: addr.city,
@@ -628,7 +672,7 @@ async function createShiprocketOrder(orderId) {
       sku: item.product_id || 'SKU001',
       units: item.quantity,
       selling_price: Math.round(item.price_at_purchase / 100), // convert paise → rupees
-      weight: ((item.products?.weight_grams || 50) / 1000).toString(),
+      weight: '0.5',
     })),
     payment_method: 'Prepaid',
     sub_total: totalInRupees,  // rupees, not paise
@@ -727,6 +771,112 @@ app.get('/api/shipping/track/:orderId', async (req, res) => {
   }
 });
 
+// SHIPROCKET — Webhook to receive automatic tracking updates
+app.post('/api/shiprocket/webhook', async (req, res) => {
+  try {
+    // Shiprocket sends a POST request whenever an order status changes
+    // It contains fields like order_id (their ID), channel_order_id (our DB ID), and current_status
+    
+    // Some headers from Shiprocket contain auth tokens, but for now we'll accept the payload directly
+    const payload = req.body;
+    console.log('[Shiprocket Webhook] Received status update:', payload.current_status, 'for order', payload.order_id);
+
+    if (!payload.current_status) {
+      return res.status(400).json({ error: 'No status provided' });
+    }
+
+    // Determine the identifier to update the order
+    // "order_id" in the payload is the Shiprocket order ID.
+    // "channel_order_id" in the payload is our database's order ID (sbOrder.id).
+    
+    let query = supabase.from('orders').update({ tracking_status: payload.current_status });
+    
+    if (payload.channel_order_id) {
+      query = query.eq('id', payload.channel_order_id);
+    } else if (payload.order_id) {
+      query = query.eq('shiprocket_order_id', String(payload.order_id));
+    } else {
+      return res.status(400).json({ error: 'No order identifier found in payload' });
+    }
+
+    const { data: updatedOrder, error } = await query.select('id').single();
+    if (error) {
+      console.error('[Shiprocket Webhook] DB update failed:', error.message);
+      return res.status(500).json({ error: 'Failed to update status in DB' });
+    }
+
+    console.log('[Shiprocket Webhook] Successfully updated order status to', payload.current_status);
+    
+    // Fire tracking update email
+    if (updatedOrder && updatedOrder.id) {
+      try {
+        await sendTrackingUpdateEmail({
+          orderId: updatedOrder.id,
+          currentStatus: payload.current_status,
+          shiprocketOrderId: payload.order_id
+        });
+      } catch (emailErr) {
+        console.error('[Shiprocket Webhook] Failed to send update email:', emailErr);
+      }
+    }
+
+    res.json({ success: true, message: 'Status updated successfully' });
+  } catch (err) {
+    console.error('[Shiprocket Webhook] Error processing webhook:', err);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRACKING EMAIL HELPER
+// ─────────────────────────────────────────────────────────────────────────────
+async function sendTrackingUpdateEmail({ orderId, currentStatus, shiprocketOrderId }) {
+  // Query Supabase for order user_id
+  const { data: order } = await supabase.from('orders').select('user_id').eq('id', orderId).single();
+  if (!order || !order.user_id) return;
+  
+  // Query user profile for email
+  const { data: profile } = await supabase.from('user_profiles').select('email, name').eq('id', order.user_id).single();
+  if (!profile || !profile.email) return;
+
+  const nodemailer = await import('nodemailer');
+  const transporter = nodemailer.default.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+  });
+
+  const shortId = orderId.slice(0, 8).toUpperCase();
+  const customerHtml = `
+    <div style="font-family:'Georgia',serif;max-width:600px;margin:auto;background:#fff;border:1px solid #FFD1E3;border-radius:16px;overflow:hidden;">
+      <div style="background:#B3184F;padding:24px;text-align:center;">
+        <h1 style="color:#fff;margin:0;font-size:24px;letter-spacing:1px;">Tracking Update</h1>
+      </div>
+      <div style="padding:32px;">
+        <h2 style="color:#B3184F;margin-top:0;">Hi ${profile.name || 'Customer'},</h2>
+        <p style="color:#444;line-height:1.6;font-size:15px;">
+          Your order <strong>#${shortId}</strong> has a new tracking update!
+        </p>
+        <div style="background:#fff5f8;border:1px solid #FFD1E3;padding:16px;border-radius:8px;margin:24px 0;text-align:center;">
+          <p style="margin:0;color:#B3184F;font-weight:bold;font-size:18px;">Status: ${currentStatus}</p>
+        </div>
+        ${shiprocketOrderId ? `<p style="color:#444;font-size:14px;text-align:center;">Shiprocket Tracking ID: <span style="font-family:monospace;font-weight:600;">${shiprocketOrderId}</span></p>` : ''}
+        <p style="color:#666;font-size:14px;margin-top:32px;border-top:1px solid #eee;padding-top:16px;text-align:center;">
+          With love,<br/><strong>Strings & Strands</strong>
+        </p>
+      </div>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from: `"Strings & Strands" <${process.env.GMAIL_USER}>`,
+    to: profile.email,
+    subject: `Order Update: Your package is ${currentStatus}!`,
+    html: customerHtml,
+  });
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // EMAIL HELPER — reusable, called directly by verify (no localhost)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -764,7 +914,11 @@ async function sendOrderConfirmationEmail({ orderId, userEmail, userName, shipro
   const customerHtml = `
     <div style="font-family:'Georgia',serif;max-width:600px;margin:auto;background:#fff;border:1px solid #FFD1E3;border-radius:16px;overflow:hidden;">
       <div style="background:linear-gradient(135deg,#FF2D74,#B3184F);padding:32px;text-align:center;">
-        <div style="font-size:48px;margin-bottom:8px;">&#127881;</div>
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;border:2px solid rgba(255,255,255,0.5);border-radius:50%;margin-bottom:16px;background:rgba(255,255,255,0.1);">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
         <h1 style="margin:0;color:#fff;font-size:28px;letter-spacing:1px;">Order Confirmed!</h1>
         <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:15px;">Thank you, ${userName}!</p>
       </div>
