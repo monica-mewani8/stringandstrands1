@@ -11,6 +11,23 @@ const OCCASIONS = [
   { id: 'celebrations', label: 'Celebrations' },
   { id: 'gift-for-her', label: 'Gift for Her' },
 ];
+
+const METALS = [
+  { id: 'Gold Plated', label: 'Gold Plated' },
+  { id: 'Rose Gold', label: 'Rose Gold' },
+  { id: 'Silver', label: 'Silver' },
+  { id: 'Oxidised', label: 'Oxidised' },
+];
+
+const TYPES = [
+  { id: 'Studs', label: 'Studs' },
+  { id: 'Hoops', label: 'Hoops' },
+  { id: 'Danglers', label: 'Danglers' },
+  { id: 'Jhumkas', label: 'Jhumkas' },
+  { id: 'Chokers', label: 'Chokers' },
+  { id: 'Long', label: 'Long' },
+];
+
 const API = import.meta.env.PROD ? '' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001');
 
 async function getAdminToken() {
@@ -57,6 +74,40 @@ export default function AddProductModal({ onClose, onSaved, editProduct }: Props
       // Keep form.occasion in sync as a comma-separated string of IDs
       const newOccasionStr = [...next].join(', ');
       setForm(f => ({ ...f, occasion: newOccasionStr }));
+      return next;
+    });
+  };
+
+  const [selectedMetals, setSelectedMetals] = useState<Set<string>>(() => {
+    if (!editProduct?.metal) return new Set();
+    const raw = editProduct.metal as string;
+    const matched = METALS.map(o => o.id).filter(id => raw.toLowerCase().includes(id.toLowerCase()));
+    return new Set(matched.length > 0 ? matched : []);
+  });
+
+  const toggleMetal = (id: string) => {
+    setSelectedMetals(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      const newMetalStr = [...next].join(', ');
+      setForm(f => ({ ...f, metal: newMetalStr }));
+      return next;
+    });
+  };
+
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(() => {
+    if (!editProduct?.type) return new Set();
+    const raw = editProduct.type as string;
+    const matched = TYPES.map(o => o.id).filter(id => raw.toLowerCase().includes(id.toLowerCase()));
+    return new Set(matched.length > 0 ? matched : []);
+  });
+
+  const toggleType = (id: string) => {
+    setSelectedTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      const newTypeStr = [...next].join(', ');
+      setForm(f => ({ ...f, type: newTypeStr }));
       return next;
     });
   };
@@ -241,7 +292,55 @@ export default function AddProductModal({ onClose, onSaved, editProduct }: Props
 
             <div className="admin-field">
               <label className="admin-label">Metal</label>
-              <input className="admin-input" name="metal" value={form.metal} onChange={handleChange} placeholder="e.g. Sterling Silver" />
+              <div style={{
+                border: '1px solid #e8b4c8',
+                borderRadius: 8,
+                padding: '10px 12px',
+                background: '#fff',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}>
+                {METALS.map(({ id, label }) => (
+                  <label
+                    key={id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: selectedMetals.has(id) ? '#c0386b' : '#555',
+                    }}
+                  >
+                    <div style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 4,
+                      border: `2px solid ${selectedMetals.has(id) ? '#c0386b' : '#ddd'}`,
+                      background: selectedMetals.has(id) ? '#c0386b' : '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s',
+                    }}>
+                      {selectedMetals.has(id) && (
+                        <svg width="10" height="8" fill="none" viewBox="0 0 10 8">
+                          <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </div>
+                    <input
+                      type="checkbox"
+                      style={{ display: 'none' }}
+                      checked={selectedMetals.has(id)}
+                      onChange={() => toggleMetal(id)}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
             </div>
 
             <div className="admin-field">
@@ -309,7 +408,55 @@ export default function AddProductModal({ onClose, onSaved, editProduct }: Props
 
             <div className="admin-field">
               <label className="admin-label">Type</label>
-              <input className="admin-input" name="type" value={form.type} onChange={handleChange} placeholder="e.g. Stud, Hoop" />
+              <div style={{
+                border: '1px solid #e8b4c8',
+                borderRadius: 8,
+                padding: '10px 12px',
+                background: '#fff',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}>
+                {TYPES.map(({ id, label }) => (
+                  <label
+                    key={id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: selectedTypes.has(id) ? '#c0386b' : '#555',
+                    }}
+                  >
+                    <div style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 4,
+                      border: `2px solid ${selectedTypes.has(id) ? '#c0386b' : '#ddd'}`,
+                      background: selectedTypes.has(id) ? '#c0386b' : '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s',
+                    }}>
+                      {selectedTypes.has(id) && (
+                        <svg width="10" height="8" fill="none" viewBox="0 0 10 8">
+                          <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </div>
+                    <input
+                      type="checkbox"
+                      style={{ display: 'none' }}
+                      checked={selectedTypes.has(id)}
+                      onChange={() => toggleType(id)}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
             </div>
 
             <div className="admin-field full">
