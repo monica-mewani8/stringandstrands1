@@ -125,15 +125,14 @@ app.get('/api/admin/products', requireAdmin, async (req, res) => {
 // POST /api/admin/products — create product
 app.post('/api/admin/products', requireAdmin, async (req, res) => {
   try {
-    const product = req.body;
+    const { variants, ...productData } = req.body;
+    const product = productData;
     const baseId = product.id || product.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now();
     
-    if (product.variants && product.variants.length > 0) {
-      const inserts = product.variants.map((v) => {
-        // Remove variants array from the base product spread
-        const { variants, ...baseProduct } = product; 
+    if (req.body.variants && req.body.variants.length > 0) {
+      const inserts = req.body.variants.map((v) => {
         return {
-          ...baseProduct,
+          ...productData,
           id: `${baseId}-${v.color.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
           name: `${product.name} (${v.color})`,
           color: v.color,
@@ -142,7 +141,7 @@ app.post('/api/admin/products', requireAdmin, async (req, res) => {
       });
       const { data, error } = await supabase.from('products').insert(inserts).select();
       if (error) throw error;
-      await logAdminAction(req.adminUser.id, 'create_product', 'product', 'bulk', `Created ${product.variants.length} variants for: ${product.name}`);
+      await logAdminAction(req.adminUser.id, 'create_product', 'product', 'bulk', `Created ${req.body.variants.length} variants for: ${product.name}`);
       res.json({ product: data[0] }); // Return first one to satisfy frontend
     } else {
       product.id = baseId;
@@ -161,7 +160,7 @@ app.post('/api/admin/products', requireAdmin, async (req, res) => {
 app.patch('/api/admin/products/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const { variants, ...updates } = req.body;
     const { data, error } = await supabase.from('products').update(updates).eq('id', id).select().single();
     if (error) throw error;
     await logAdminAction(req.adminUser.id, 'edit_product', 'product', id, `Updated: ${JSON.stringify(Object.keys(updates))}`);
