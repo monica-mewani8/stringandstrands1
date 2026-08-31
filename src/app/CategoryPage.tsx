@@ -13,11 +13,6 @@ interface CategoryPageProps {
 
 const FILTER_GROUPS = [
   {
-    id: "price",
-    label: "Price",
-    options: ["Under ₹500", "₹500 - ₹1000", "₹1000 - ₹2000", "Over ₹2000"]
-  },
-  {
     id: "metal",
     label: "Metal",
     options: ["Gold Plated", "Rose Gold", "Silver", "Oxidised"]
@@ -30,7 +25,7 @@ const FILTER_GROUPS = [
   {
     id: "occasion",
     label: "Occasion",
-    options: ["Everyday", "Office", "Party", "Festive", "Gifting"]
+    options: ["Everyday", "Office", "Celebrations", "Gift for Her"]
   },
   {
     id: "type",
@@ -49,7 +44,7 @@ export default function CategoryPage({ wishlist, toggleWishlist, type }: Categor
   const defaultSort = type === "new-arrivals" ? "Newest First" : "Best Selling";
   const [currentSort, setCurrentSort] = useState(defaultSort);
   const [isSortOpen, setIsSortOpen] = useState(false);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   const SORT_OPTIONS = ["Best Selling", "Price Low-High", "Price High-Low", "Newest First"];
@@ -70,7 +65,7 @@ export default function CategoryPage({ wishlist, toggleWishlist, type }: Categor
       }
       const { data } = await query;
       if (cancelled) return;
-      const mapped: Product[] = (data || []).map((p: any) => ({
+      const mapped = (data || []).map((p: any) => ({
         id: p.id,
         name: p.name,
         price: p.discounted_price,
@@ -78,6 +73,11 @@ export default function CategoryPage({ wishlist, toggleWishlist, type }: Categor
         img: p.images?.[0] || '',
         badge: p.is_new ? 'New' : (p.is_bestseller ? 'Best' : undefined),
         stock: p.stock,
+        metal: p.metal || '',
+        color: p.color || '',
+        occasion: p.occasion || '',
+        type: p.type || '',
+        created_at: p.created_at,
       }));
       mapped.sort((a, b) => {
         const aInStock = a.stock > 0 ? 1 : 0;
@@ -106,9 +106,63 @@ export default function CategoryPage({ wishlist, toggleWishlist, type }: Categor
     });
   };
 
+  const isEarrings = paramId?.toLowerCase() === 'earrings';
+  const filteredGroups = FILTER_GROUPS.filter(g => {
+    if (g.id === 'type' && !isEarrings) return false;
+    return true;
+  });
+
   const activeFilters = type === "occasion" 
-    ? [FILTER_GROUPS.find(g => g.id === "occasion")!, ...FILTER_GROUPS.filter(g => g.id !== "occasion")]
-    : FILTER_GROUPS;
+    ? [filteredGroups.find(g => g.id === "occasion")!, ...filteredGroups.filter(g => g.id !== "occasion")]
+    : filteredGroups;
+
+  const [selectedFilters, setSelectedFilters] = useState<Record<string, Set<string>>>({});
+  
+  const toggleFilterOption = (groupId: string, option: string) => {
+    setSelectedFilters(prev => {
+      const next = { ...prev };
+      if (!next[groupId]) next[groupId] = new Set();
+      const nextSet = new Set(next[groupId]);
+      if (nextSet.has(option)) nextSet.delete(option);
+      else nextSet.add(option);
+      next[groupId] = nextSet;
+      return next;
+    });
+  };
+
+  const displayProducts = React.useMemo(() => {
+    let filtered = products.filter(p => {
+      for (const group of activeFilters) {
+        const selected = selectedFilters[group.id];
+        if (!selected || selected.size === 0) continue;
+        
+        const pValue = (p as any)[group.id]?.toLowerCase() || '';
+        let matched = false;
+        
+        for (const opt of selected) {
+          if (group.id === 'occasion') {
+            const occId = opt === 'Gift for Her' ? 'gift-for-her' : opt.toLowerCase();
+            if (pValue.includes(occId)) { matched = true; break; }
+          } else {
+            if (pValue.includes(opt.toLowerCase())) { matched = true; break; }
+          }
+        }
+        if (!matched) return false;
+      }
+      return true;
+    });
+
+    return filtered.sort((a, b) => {
+      const aInStock = a.stock > 0 ? 1 : 0;
+      const bInStock = b.stock > 0 ? 1 : 0;
+      if (aInStock !== bInStock) return bInStock - aInStock;
+
+      if (currentSort === "Price Low-High") return a.price - b.price;
+      if (currentSort === "Price High-Low") return b.price - a.price;
+      if (currentSort === "Newest First") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      return 0; // Best Selling fallback
+    });
+  }, [products, selectedFilters, activeFilters, currentSort]);
 
   const FiltersContent = () => (
     <div className="space-y-4">
@@ -130,7 +184,12 @@ export default function CategoryPage({ wishlist, toggleWishlist, type }: Categor
                 {group.options.map(opt => (
                   <label key={opt} className="flex items-center gap-3 cursor-pointer group/label">
                     <div className="relative flex items-center justify-center w-4 h-4 rounded border border-[#FFD1E3] bg-white group-hover/label:border-[#FF2D74] transition-colors">
-                      <input type="checkbox" className="absolute opacity-0 w-0 h-0 peer" />
+                      <input 
+                        type="checkbox" 
+                        className="absolute opacity-0 w-0 h-0 peer" 
+                        checked={selectedFilters[group.id]?.has(opt) || false}
+                        onChange={() => toggleFilterOption(group.id, opt)}
+                      />
                       <div className="w-2.5 h-2.5 rounded-sm bg-[#FF2D74] opacity-0 peer-checked:opacity-100 transition-opacity" />
                     </div>
                     <span className="text-sm text-[#B3184F] group-hover/label:text-[#FF2D74] transition-colors">{opt}</span>
@@ -238,7 +297,7 @@ export default function CategoryPage({ wishlist, toggleWishlist, type }: Categor
 
           {/* Product Grid */}
           <div className="flex-1">
-            {products.length === 0 ? (
+            {displayProducts.length === 0 ? (
               <div className="py-20 flex flex-col items-center justify-center text-center">
                 <h3 className="text-2xl font-bold text-[#B3184F] mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>
                   New pieces coming soon
@@ -252,7 +311,7 @@ export default function CategoryPage({ wishlist, toggleWishlist, type }: Categor
             ) : (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-5">
-                  {products.map(p => (
+                  {displayProducts.map(p => (
                     <div key={p.id} className="w-full">
                       <ProductCard product={p} wishlist={wishlist} onWishlistToggle={toggleWishlist} />
                     </div>
