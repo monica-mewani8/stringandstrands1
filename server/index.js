@@ -139,12 +139,14 @@ app.post('/api/admin/products', requireAdmin, async (req, res) => {
           images: v.images
         };
       });
+      console.log('Inserting bulk variants payload keys:', inserts.map(i => Object.keys(i)));
       const { data, error } = await supabase.from('products').insert(inserts).select();
       if (error) throw error;
       await logAdminAction(req.adminUser.id, 'create_product', 'product', 'bulk', `Created ${req.body.variants.length} variants for: ${product.name}`);
       res.json({ product: data[0] }); // Return first one to satisfy frontend
     } else {
       product.id = baseId;
+      console.log('Inserting single product payload keys:', Object.keys(product));
       const { data, error } = await supabase.from('products').insert(product).select().single();
       if (error) throw error;
       await logAdminAction(req.adminUser.id, 'create_product', 'product', data.id, `Created: ${data.name}`);
