@@ -72,7 +72,11 @@ export default function ProductPage({ wishlist, toggleWishlist, isWishlisted }: 
           .then(({ data: variantData }) => {
             if (variantData) {
               const validVariants = variantData
-                .filter((v: any) => v.name === baseName || v.name.startsWith(baseName + ' ('))
+                .filter((v: any) => {
+                  const vMatch = v.name.match(/^(.*?)\s*\(([^)]+)\)$/);
+                  const vBaseName = vMatch ? vMatch[1] : v.name;
+                  return vBaseName.trim() === baseName.trim();
+                })
                 .map((v: any) => {
                   const m = v.name.match(/\(([^)]+)\)$/);
                   return { id: v.id, color: m ? m[1] : (v.color || 'Standard'), title: v.name };
